@@ -748,12 +748,24 @@ async function init(){
 
   try{
     setSyncing();
-    [lancamentos,parcelas,contasConfig,pedidos]=await Promise.all([
+    const [lancs,parcs,contas,peds,configs]=await Promise.all([
       sbGet('lancamentos','order=created_at.desc'),
       sbGet('parcelas','order=data_vencimento.asc'),
       sbGet('contas_config','order=id.asc'),
       sbGet('pedidos','order=id.desc'),
+      sbGet('configuracoes',''),
     ]);
+    lancamentos=lancs;parcelas=parcs;contasConfig=contas;pedidos=peds;
+
+    // Carregar metas salvas
+    if(configs&&configs.length){
+      configs.forEach(c=>{
+        if(c.chave==='meta_min')document.getElementById('metaMin').value=c.valor||'';
+        if(c.chave==='meta_ideal')document.getElementById('metaIdeal').value=c.valor||'';
+        if(c.chave==='meta_invest')document.getElementById('metaInvest').value=c.valor||'';
+      });
+    }
+
     clearTimeout(timeout);
     setSynced();
     document.getElementById('loadingScreen').style.display='none';
