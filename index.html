@@ -301,6 +301,7 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
   <div id="btnFinanceiro" style="display:none">
     <a href="financeiro.html" target="_blank" style="background:rgba(212,168,58,0.15);border:1px solid rgba(212,168,58,0.35);color:#d4a83a;font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 16px;text-decoration:none;transition:all .2s;white-space:nowrap">→ financeiro</a>
   </div>
+  <button onclick="sair()" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#a89880;font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 14px;cursor:pointer;transition:all .2s;white-space:nowrap;margin-left:8px" onmouseover="this.style.borderColor='rgba(217,83,79,0.4)';this.style.color='#d88a7a'" onmouseout="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='#a89880'">sair</button>
 </div>
 
 <!-- ════════════════════════════════════
@@ -1582,6 +1583,15 @@ function entrar(){
   document.getElementById('sistemaApp').style.display='block';
   document.getElementById('loginErro').textContent='';
   renderMetrics();renderLista();
+}
+
+function sair(){
+  nivelAcesso='';
+  document.getElementById('sistemaApp').style.display='none';
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginSenha').value='';
+  document.getElementById('loginErro').textContent='';
+  document.getElementById('btnFinanceiro').style.display='none';
 }
 
 // Init
