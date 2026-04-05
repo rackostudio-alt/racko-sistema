@@ -4,6 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>rackō — sistema integrado</title>
+<style>
+/* LOGIN SCREEN */
+#loginScreen{position:fixed;inset:0;background:#0f0d0a;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0}
+#loginScreen.hidden{display:none}
+.login-logo{font-family:'Cormorant Garamond',serif;font-size:42px;font-style:italic;font-weight:300;color:#d4a83a;letter-spacing:6px;margin-bottom:4px}
+.login-sub{font-size:9px;letter-spacing:4px;text-transform:uppercase;color:#a89880;margin-bottom:40px}
+.login-box{background:#161208;border:1px solid rgba(212,168,58,0.25);padding:32px;width:100%;max-width:360px}
+.login-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#a89880;margin-bottom:20px;text-align:center}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#a89880;margin-bottom:6px;font-family:'Rajdhani',sans-serif}
+.login-field input{width:100%;background:#1e1a14;border:1px solid rgba(212,168,58,0.4);color:#f0e4cc;font-family:'Rajdhani',sans-serif;font-size:15px;padding:11px 14px;outline:none;letter-spacing:2px}
+.login-field input:focus{border-color:#d4a83a}
+.login-btn{width:100%;background:#d4a83a;border:none;color:#0f0d0a;font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;font-weight:600;letter-spacing:2px;padding:13px;cursor:pointer;margin-top:4px;transition:background .2s}
+.login-btn:hover{background:#e8c060}
+.login-error{font-size:11px;color:#d88a7a;text-align:center;margin-top:10px;min-height:18px;font-family:'Rajdhani',sans-serif;letter-spacing:1px}
+.login-version{font-size:9px;color:#6b6560;text-align:center;margin-top:20px;letter-spacing:2px}
+</style>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Rajdhani:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -254,7 +271,24 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
 </head>
 <body>
 <div id="print-frame" style="display:none"></div>
-<div class="sistema">
+
+<!-- TELA DE LOGIN -->
+<div id="loginScreen">
+  <div class="login-logo">rackō</div>
+  <div class="login-sub">studio de joias</div>
+  <div class="login-box">
+    <div class="login-title">acesso ao sistema</div>
+    <div class="login-field">
+      <label>senha de acesso</label>
+      <input type="password" id="loginSenha" placeholder="••••••••" onkeydown="if(event.key==='Enter')tentarLogin()">
+    </div>
+    <button class="login-btn" onclick="tentarLogin()">entrar →</button>
+    <div class="login-error" id="loginErro"></div>
+    <div class="login-version">crm & orçamento · rackō studio</div>
+  </div>
+</div>
+
+<div class="sistema" id="sistemaApp" style="display:none">
 
 <!-- TOP NAV -->
 <div class="topnav">
@@ -263,6 +297,9 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
     <button class="topnav-tab active" onclick="goScreen('orcamento')">① Orçamento</button>
     <button class="topnav-tab" onclick="goScreen('crm')">② CRM & Clientes</button>
     <button class="topnav-tab" onclick="goScreen('relatorio')">③ Relatório</button>
+  </div>
+  <div id="btnFinanceiro" style="display:none">
+    <a href="financeiro.html" target="_blank" style="background:rgba(212,168,58,0.15);border:1px solid rgba(212,168,58,0.35);color:#d4a83a;font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:8px 16px;text-decoration:none;transition:all .2s;white-space:nowrap">→ financeiro</a>
   </div>
 </div>
 
@@ -595,7 +632,7 @@ Combinações entre PIX e cartão são aceitas.</textarea>
   <div id="relatorio-content"></div>
 </div>
 
-</div><!-- /sistema -->
+</div><!-- /sistemaApp -->
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" style="display:none" onclick="closeModal(event)">
@@ -1503,6 +1540,52 @@ async function confirmarEfetivar(id,totalVal){
     showToast('✗ Erro: '+e.message);
   }
 }
+
+// ══════════════════════════════
+// ALTERAR SENHAS (via financeiro)
+// ══════════════════════════════
+// As senhas são gerenciadas pela aba ⚙ senhas no financeiro.
+
+// ══════════════════════════════
+// AUTENTICAÇÃO
+// ══════════════════════════════
+let nivelAcesso=''; // 'master' ou 'colaboradora'
+
+async function tentarLogin(){
+  const senha=document.getElementById('loginSenha').value.trim();
+  const erroEl=document.getElementById('loginErro');
+  if(!senha){erroEl.textContent='informe a senha';return}
+  erroEl.textContent='verificando…';
+  try{
+    const configs=await sbGet('racko_config_acesso','');
+    const senhaM=configs.find(c=>c.chave==='senha_master')?.valor||'';
+    const senhaC=configs.find(c=>c.chave==='senha_colaboradora')?.valor||'';
+    if(senha===senhaM){
+      nivelAcesso='master';
+      document.getElementById('btnFinanceiro').style.display='block';
+      entrar();
+    }else if(senha===senhaC){
+      nivelAcesso='colaboradora';
+      document.getElementById('btnFinanceiro').style.display='none';
+      entrar();
+    }else{
+      erroEl.textContent='senha incorreta';
+      document.getElementById('loginSenha').value='';
+    }
+  }catch(e){
+    erroEl.textContent='erro de conexão — tente novamente';
+  }
+}
+
+function entrar(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('sistemaApp').style.display='block';
+  document.getElementById('loginErro').textContent='';
+  renderMetrics();renderLista();
+}
+
+// Init
+document.getElementById('f-data').value=new Date().toISOString().split('T')[0];
 
 // Init
 document.getElementById('f-data').value=new Date().toISOString().split('T')[0];
