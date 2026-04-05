@@ -990,7 +990,8 @@ function buildClientBody(d, showPhotos=true) {
       <div class="contact-block">
         <p>CNPJ 42.322.722/0001-02</p>
         <p>@racko_studio · (61) 99837-1075</p>
-        <p>Brasília – DF</p>
+        <p><strong>Ateliê:</strong> SHDB QL 32, Lago Sul — Brasília-DF</p>
+        <p><strong>Loja:</strong> Torre de TV, Bloco J, 353 — Brasília-DF</p>
       </div>
     </div>
     <div class="doc-title">Proposta de Orçamento</div>
@@ -1097,10 +1098,66 @@ function gerarPDFInterno(){
 // ══════════════════════════════
 // CRM DATA
 // ══════════════════════════════
-function getRecords(){try{return JSON.parse(localStorage.getItem('racko_crm')||'[]')}catch(e){return[]}}
-function saveRecords(r){localStorage.setItem('racko_crm',JSON.stringify(r));}
-function getRecord(id){return getRecords().find(r=>r.id===id);}
-function updateRecord(id,changes){const records=getRecords(),idx=records.findIndex(r=>r.id===id);if(idx>=0){records[idx]={...records[idx],...changes,updatedAt:new Date().toISOString()};saveRecords(records)}}
+// ══════════════════════════════
+// CRM DATA — SUPABASE
+// ══════════════════════════════
+let crmRecords=[]; // cache local
+
+async function loadCRMRecords(){
+  try{
+    crmRecords=await sbGet('crm_orcamentos','order=created_at.desc');
+    // Mapear campos do Supabase para formato compatível com o sistema
+    crmRecords=crmRecords.map(r=>({
+      ...r,
+      id:r.orc_id||String(r.id),
+      _sbid:r.id,
+      nome:r.nome,tel:r.tel,email:r.email,data:r.data,
+      tipo:r.tipo,metal:r.metal,tam:r.tam,acab:r.acab,
+      pedras:r.pedras,dim:r.dim,pers:r.pers,desc:r.descricao,
+      prazo:r.prazo,valid:r.validade,
+      opts:r.opts||[],totalVal:Number(r.total_val)||0,
+      pgto:r.pgto||'',status:r.status||'enviado',
+      followUp:r.follow_up||'',notas:r.notas||'',
+      contatos:r.contatos||[],dataEntrega:r.data_entrega||'',
+      pedidoFinanceiro:r.pedido_financeiro||''
+    }));
+  }catch(e){console.warn('Erro ao carregar CRM:',e);crmRecords=[];}
+  return crmRecords;
+}
+
+function getRecords(){return crmRecords;}
+function getRecord(id){return crmRecords.find(r=>r.id===id||r._sbid===parseInt(id));}
+
+async function saveRecords(records){
+  crmRecords=records;
+}
+
+async function updateRecord(id,changes){
+  const r=getRecord(id);if(!r)return;
+  // Mapear campos locais para campos do Supabase
+  const sbChanges={updated_at:new Date().toISOString()};
+  if(changes.status!==undefined)sbChanges.status=changes.status;
+  if(changes.followUp!==undefined)sbChanges.follow_up=changes.followUp||null;
+  if(changes.notas!==undefined)sbChanges.notas=changes.notas;
+  if(changes.contatos!==undefined)sbChanges.contatos=changes.contatos;
+  if(changes.dataEntrega!==undefined)sbChanges.data_entrega=changes.dataEntrega||null;
+  if(changes.pedidoFinanceiro!==undefined)sbChanges.pedido_financeiro=changes.pedidoFinanceiro||null;
+  try{
+    await sbUpdate('crm_orcamentos',r._sbid,sbChanges);
+    Object.assign(r,changes);
+    showToast('Salvo ✓');
+  }catch(e){console.warn('updateRecord error:',e);showToast('✗ erro ao salvar');}
+}
+
+async function excluirRegistroSB(id){
+  if(!confirm('Excluir este registro permanentemente?'))return;
+  const r=getRecord(id);if(!r)return;
+  try{
+    await sbDelete('crm_orcamentos',r._sbid);
+    crmRecords=crmRecords.filter(x=>x.id!==id);
+    closeModalDirect();showToast('Registro excluído');
+  }catch(e){showToast('✗ erro ao excluir');}
+}
 
 // ══════════════════════════════
 // METRICS
@@ -1293,7 +1350,13 @@ function openModal(id){
 }
 
 function closeModal(e){if(e.target===document.getElementById('modalOverlay'))closeModalDirect();}
-function closeModalDirect(){document.getElementById('modalOverlay').style.display='none';renderMetrics();const active=document.querySelector('#screen-crm .crm-tab.active');if(active){const tabs=['lista','pipeline','followup'];const idx=[...document.querySelectorAll('#screen-crm .crm-tab')].indexOf(active);if(idx===0)renderLista();if(idx===1)renderPipeline();if(idx===2)renderFollowUp();}}
+async function closeModalDirect(){
+  document.getElementById('modalOverlay').style.display='none';
+  await loadCRMRecords();
+  renderMetrics();
+  const active=document.querySelector('#screen-crm .crm-tab.active');
+  if(active){const tabs=['lista','pipeline','followup'];const idx=[...document.querySelectorAll('#screen-crm .crm-tab')].indexOf(active);if(idx===0)renderLista();if(idx===1)renderPipeline();if(idx===2)renderFollowUp();}
+}
 function updateField(id,field,value){const c={};c[field]=value;updateRecord(id,c);showToast('Salvo ✓');}
 function addContato(id){
   const texto=document.getElementById('contato-texto').value.trim();if(!texto)return;
@@ -1305,7 +1368,7 @@ function addContato(id){
   document.getElementById('modal-contact-log').innerHTML=contatos.map(c=>`<div class="contact-entry"><div class="contact-entry-date">${fmtDate(c.date)} · ${c.tipo}</div><div class="contact-entry-text">${c.texto}</div></div>`).join('');
   showToast('Contato registrado ✓');
 }
-function excluirRegistro(id){if(!confirm('Excluir este registro permanentemente?'))return;saveRecords(getRecords().filter(r=>r.id!==id));closeModalDirect();showToast('Registro excluído');}
+function excluirRegistro(id){excluirRegistroSB(id);}
 
 // ══════════════════════════════
 // WHATSAPP
@@ -1376,7 +1439,7 @@ function lerImport(inp){
     if(confirm(`Importar ${data.length} registros? Serão mesclados com os existentes.`)){
       const existing=getRecords();const merged=[...data];
       existing.forEach(r=>{if(!merged.find(m=>m.id===r.id))merged.push(r);});
-      saveRecords(merged);renderMetrics();renderLista();showToast(`${data.length} registros importados ✓`);
+      saveRecords(merged);await loadCRMRecords();renderMetrics();renderLista();showToast(`${data.length} registros importados ✓`);
     }}catch(err){alert('Erro ao importar: arquivo inválido.');}};
   reader.readAsText(file);
 }
@@ -1534,6 +1597,7 @@ async function confirmarEfetivar(id,totalVal){
 
     document.getElementById('efetivarOverlay').style.display='none';
     showToast(`✓ Pedido #${numero} criado!\n${parcelas.length} parcela(s) em Pendentes.`);
+    await loadCRMRecords();
     renderMetrics();renderLista();
 
   }catch(e){
@@ -1578,10 +1642,11 @@ async function tentarLogin(){
   }
 }
 
-function entrar(){
+async function entrar(){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('sistemaApp').style.display='block';
   document.getElementById('loginErro').textContent='';
+  await loadCRMRecords();
   renderMetrics();renderLista();
 }
 
