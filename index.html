@@ -1435,11 +1435,11 @@ function importarDados(){document.getElementById('import-file').click();}
 function lerImport(inp){
   const file=inp.files[0];if(!file)return;
   const reader=new FileReader();
-  reader.onload=e=>{try{const data=JSON.parse(e.target.result);if(!Array.isArray(data))throw new Error();
+  reader.onload=async e=>{try{const data=JSON.parse(e.target.result);if(!Array.isArray(data))throw new Error();
     if(confirm(`Importar ${data.length} registros? Serão mesclados com os existentes.`)){
       const existing=getRecords();const merged=[...data];
       existing.forEach(r=>{if(!merged.find(m=>m.id===r.id))merged.push(r);});
-      saveRecords(merged);await loadCRMRecords();renderMetrics();renderLista();showToast(`${data.length} registros importados ✓`);
+      await loadCRMRecords();renderMetrics();renderLista();showToast(`${data.length} registros importados ✓`);
     }}catch(err){alert('Erro ao importar: arquivo inválido.');}};
   reader.readAsText(file);
 }
