@@ -1616,29 +1616,43 @@ async function confirmarEfetivar(id,totalVal){
 // ══════════════════════════════
 let nivelAcesso=''; // 'master' ou 'colaboradora'
 
+// Senhas padrão caso o Supabase não responda
+const SENHA_MASTER_DEFAULT='racko2026';
+const SENHA_COLAB_DEFAULT='colabora2026';
+
 async function tentarLogin(){
   const senha=document.getElementById('loginSenha').value.trim();
   const erroEl=document.getElementById('loginErro');
   if(!senha){erroEl.textContent='informe a senha';return}
   erroEl.textContent='verificando…';
+
+  // Primeiro testa com senhas padrão (sem precisar do Supabase)
+  // para garantir acesso mesmo com conexão lenta
+  let senhaM=SENHA_MASTER_DEFAULT;
+  let senhaC=SENHA_COLAB_DEFAULT;
+
+  // Tenta buscar senhas atualizadas do Supabase com timeout de 5 segundos
   try{
-    const configs=await sbGet('racko_config_acesso','');
-    const senhaM=configs.find(c=>c.chave==='senha_master')?.valor||'';
-    const senhaC=configs.find(c=>c.chave==='senha_colaboradora')?.valor||'';
-    if(senha===senhaM){
-      nivelAcesso='master';
-      document.getElementById('btnFinanceiro').style.display='block';
-      entrar();
-    }else if(senha===senhaC){
-      nivelAcesso='colaboradora';
-      document.getElementById('btnFinanceiro').style.display='none';
-      entrar();
-    }else{
-      erroEl.textContent='senha incorreta';
-      document.getElementById('loginSenha').value='';
-    }
+    const timeoutPromise=new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),5000));
+    const configs=await Promise.race([sbGet('racko_config_acesso',''),timeoutPromise]);
+    senhaM=configs.find(c=>c.chave==='senha_master')?.valor||SENHA_MASTER_DEFAULT;
+    senhaC=configs.find(c=>c.chave==='senha_colaboradora')?.valor||SENHA_COLAB_DEFAULT;
   }catch(e){
-    erroEl.textContent='erro de conexão — tente novamente';
+    // Usa senhas padrão se Supabase não responder
+    console.warn('Usando senhas padrão — Supabase indisponível');
+  }
+
+  if(senha===senhaM){
+    nivelAcesso='master';
+    document.getElementById('btnFinanceiro').style.display='block';
+    entrar();
+  }else if(senha===senhaC){
+    nivelAcesso='colaboradora';
+    document.getElementById('btnFinanceiro').style.display='none';
+    entrar();
+  }else{
+    erroEl.textContent='senha incorreta';
+    document.getElementById('loginSenha').value='';
   }
 }
 
