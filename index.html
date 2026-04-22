@@ -327,7 +327,7 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
         <div class="field"><label>Categoria</label>
           <select id="c-cat">
             <option value="">selecione</option>
-            <option>Anel</option><option>Brinco</option><option>Colar / Gargantilha</option>
+            <option>Anel</option><option>Aliança</option><option>Brinco</option><option>Colar / Gargantilha</option>
             <option>Pulseira</option><option>Bracelete</option><option>Pingente</option>
             <option>Conjunto</option><option>Outro</option>
           </select>
@@ -470,7 +470,7 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
       <div class="g2">
         <div class="field"><label>Tipo de peça</label>
           <select id="f-tipo"><option value="">selecione</option>
-            <option>Anel</option><option>Brinco</option><option>Colar / Gargantilha</option>
+            <option>Anel</option><option>Aliança</option><option>Brinco</option><option>Colar / Gargantilha</option>
             <option>Pulseira</option><option>Bracelete</option><option>Pingente</option>
             <option>Conjunto</option><option>Outro</option>
           </select>
@@ -592,6 +592,14 @@ Combinações entre PIX e cartão são aceitas.</textarea>
       </select>
       <button class="btn btn-ghost btn-sm" onclick="limparFiltros()">limpar</button>
     </div>
+    <div class="filters" style="margin-top:-4px;padding-top:0">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);white-space:nowrap">período:</span>
+        <input type="date" class="filter-input" id="filterDataDe" onchange="renderLista()" style="flex:1;min-width:130px" title="Data inicial">
+        <span style="color:var(--muted);font-size:12px">→</span>
+        <input type="date" class="filter-input" id="filterDataAte" onchange="renderLista()" style="flex:1;min-width:130px" title="Data final">
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Cliente</th><th>Peça</th><th>Metal</th><th>Valor</th><th>Status</th><th>Data</th><th>Follow-up</th><th></th></tr></thead>
@@ -665,6 +673,7 @@ function goScreen(id){
   document.querySelectorAll('.topnav-tab').forEach((t,i)=>t.classList.toggle('active',['orcamento','crm','relatorio'][i]===id));
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
+  if(id==='orcamento')resetOrcId(); // novo orçamento = novo ID de sessão
   if(id==='crm'){renderMetrics();renderLista();}
   if(id==='relatorio')renderRelatorio();
 }
@@ -835,15 +844,21 @@ const sbUpdate=async(t,id,d)=>{const r=await fetch(SB_API(t)+'?id=eq.'+id,{metho
 // ══════════════════════════════
 // CRM SAVE
 // ══════════════════════════════
+// orc_id gerado UMA VEZ por sessão de orçamento.
+// Resetado apenas ao limpar o formulário explicitamente.
+let _currentOrcId = 'ORC-' + Date.now();
+function resetOrcId(){ _currentOrcId = 'ORC-' + Date.now(); }
+
 function saveToCRM(d){
   try{
     const records=JSON.parse(localStorage.getItem('racko_crm')||'[]');
     const opts=d.opts||[];
     const totalVal=opts.reduce((a,b)=>a+(b.value||0),0);
-    const key=d.cliNome+'_'+d.cliData;
-    const existingIdx=records.findIndex(r=>r.key===key);
+    // Usa orc_id fixo da sessão — não nome+data — para identificar "mesmo orçamento"
+    const sessionId = _currentOrcId;
+    const existingIdx=records.findIndex(r=>r.id===sessionId);
     const record={
-      key,id:existingIdx>=0?records[existingIdx].id:'ORC-'+Date.now(),
+      key:sessionId,id:sessionId,
       createdAt:existingIdx>=0?records[existingIdx].createdAt:new Date().toISOString(),
       updatedAt:new Date().toISOString(),
       nome:d.cliNome,tel:d.cliTel,email:d.cliEmail,data:d.cliData,
@@ -870,7 +885,20 @@ function saveToCRM(d){
       total_val:record.totalVal,pgto:record.pgto,
       status:record.status,contatos:record.contatos,pedido_financeiro:record.pedidoFinanceiro||null
     };
-    sbInsert('crm_orcamentos',sbData).catch(e=>console.warn('Supabase CRM save:',e));
+    // Upsert: atualiza se já existe orc_id, insere se não existe
+    sbGet('crm_orcamentos',`orc_id=eq.${record.id}`).then(rows=>{
+      if(rows.length>0){
+        // Já existe — atualiza o registro existente
+        sbUpdate('crm_orcamentos',rows[0].id,{...sbData,updated_at:new Date().toISOString()})
+          .catch(e=>console.warn('Supabase CRM update:',e));
+      }else{
+        // Não existe — insere novo
+        sbInsert('crm_orcamentos',sbData).catch(e=>console.warn('Supabase CRM insert:',e));
+      }
+    }).catch(e=>{
+      // Se falhar a verificação, tenta inserir mesmo assim
+      sbInsert('crm_orcamentos',sbData).catch(e2=>console.warn('Supabase CRM save:',e2));
+    });
 
     showToast('✓ Orçamento salvo no CRM');
   }catch(e){console.warn('CRM save error:',e);}
@@ -1191,9 +1219,13 @@ function renderLista(){
   const search=(document.getElementById('search')?.value||'').toLowerCase();
   const fStatus=document.getElementById('filterStatus')?.value||'';
   const fMetal=document.getElementById('filterMetal')?.value||'';
+  const fDe=document.getElementById('filterDataDe')?.value||'';
+  const fAte=document.getElementById('filterDataAte')?.value||'';
   if(search)records=records.filter(r=>(r.nome||'').toLowerCase().includes(search)||(r.tipo||'').toLowerCase().includes(search)||(r.id||'').toLowerCase().includes(search));
   if(fStatus)records=records.filter(r=>r.status===fStatus);
   if(fMetal)records=records.filter(r=>(r.metal||'').includes(fMetal));
+  if(fDe)records=records.filter(r=>(r.data||'')>=fDe);
+  if(fAte)records=records.filter(r=>(r.data||'')<=fAte);
   const tbody=document.getElementById('lista-tbody');
   const empty=document.getElementById('lista-empty');
   if(!records.length){tbody.innerHTML='';empty.style.display='block';return;}
@@ -1203,7 +1235,7 @@ function renderLista(){
     return`<tr onclick="openModal('${r.id}')"><td><div class="td-name">${r.nome||'—'}</div><div class="td-ref">${r.id}</div></td><td>${r.tipo||'—'}</td><td style="font-size:11px">${r.metal||'—'}</td><td><div class="td-val">${fmt(r.totalVal)}</div></td><td><span class="status-pill ${statusClass(r.status)}">${statusLabel(r.status)}</span></td><td style="font-size:11px;color:var(--muted)">${r.data||'—'}</td><td>${fu}</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openModal('${r.id}')" style="margin-right:4px">ver</button><button class="btn btn-whatsapp btn-sm" onclick="event.stopPropagation();openWAModal('${r.id}')">WA</button></td></tr>`;
   }).join('');
 }
-function limparFiltros(){document.getElementById('search').value='';document.getElementById('filterStatus').value='';document.getElementById('filterMetal').value='';renderLista();}
+function limparFiltros(){document.getElementById('search').value='';document.getElementById('filterStatus').value='';document.getElementById('filterMetal').value='';document.getElementById('filterDataDe').value='';document.getElementById('filterDataAte').value='';renderLista();}
 
 // ══════════════════════════════
 // PIPELINE
@@ -1255,7 +1287,7 @@ function renderRelatorio(){
   const maxCount=Math.max(...statuses.map(s=>records.filter(r=>r.status===s).length),1);
   const metals=['Prata 925','Prata 950','Ouro 18k','Ambos'];
   const maxMetal=Math.max(...metals.map(m=>records.filter(r=>(r.metal||'').includes(m.split(' e ')[0])).length),1);
-  const tipos=['Anel','Brinco','Colar / Gargantilha','Pulseira','Bracelete','Pingente','Conjunto'];
+  const tipos=['Anel','Aliança','Brinco','Colar / Gargantilha','Pulseira','Bracelete','Pingente','Conjunto'];
   const maxTipo=Math.max(...tipos.map(t=>records.filter(r=>r.tipo===t).length),1);
   const monthMap={};records.forEach(r=>{if(!r.createdAt)return;const d=new Date(r.createdAt),key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;if(!monthMap[key])monthMap[key]={count:0,valor:0};monthMap[key].count++;monthMap[key].valor+=(r.totalVal||0);});
   const monthKeys=Object.keys(monthMap).sort().slice(-6);
@@ -1383,6 +1415,7 @@ function buildWATemplates(r){
   const valorStr=opts.length>0?opts.map(o=>`${o.label}: ${fmt(o.value)}`).join(' | '):'—';
   const genMap={
     'Anel':       ['o','seu','personalizado','lindo','anel'],
+    'Aliança':    ['a','sua','personalizada','linda','aliança'],
     'Brinco':     ['o','seu','personalizado','lindo','brinco'],
     'Colar / Gargantilha': ['a','sua','personalizada','linda','gargantilha'],
     'Pulseira':   ['a','sua','personalizada','linda','pulseira'],
