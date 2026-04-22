@@ -882,9 +882,33 @@ async function init(){
     construirFiltroChips();
   }catch(e){
     clearTimeout(timeout);
-    setSyncError();
     console.error('Erro no init:',e);
-    document.getElementById('loadingScreen').innerHTML=`<div class="logo">rackō</div><div style="font-size:12px;color:var(--red);text-align:center;padding:0 20px">Erro de conexão.<br>${e.message||'Verifique sua internet.'}</div><button onclick="location.reload()" style="background:var(--gold);color:#1a1508;border:none;padding:10px 24px;border-radius:8px;font-family:'DM Mono',monospace;cursor:pointer;margin-top:8px">recarregar</button>`;
+    document.getElementById('loadingScreen').innerHTML=`<div class="logo">rackō</div><div style="font-size:12px;color:var(--text2);text-align:center;padding:0 20px">Reconectando…</div><div class="spinner" style="margin:0 auto"></div>`;
+    setTimeout(async()=>{
+      try{
+        setSyncing();
+        const [lancs,parcs,contas,peds,configs]=await Promise.all([
+          sbGet('lancamentos','order=created_at.desc'),
+          sbGet('parcelas','order=data_vencimento.asc'),
+          sbGet('contas_config','order=id.asc'),
+          sbGet('pedidos','order=id.desc'),
+          sbGet('configuracoes',''),
+        ]);
+        lancamentos=lancs;parcelas=parcs;contasConfig=contas;pedidos=peds;
+        if(configs&&configs.length){configs.forEach(c=>{if(c.chave==='meta_min')document.getElementById('metaMin').value=c.valor||'';if(c.chave==='meta_ideal')document.getElementById('metaIdeal').value=c.valor||'';if(c.chave==='meta_invest')document.getElementById('metaInvest').value=c.valor||'';});}
+        setSynced();
+        document.getElementById('loadingScreen').style.display='none';
+        document.getElementById('app').style.display='block';
+        renderCatSelect();renderContaSelect();renderDashboard();renderContas();renderRelatorio();renderCategorias();
+        atualizarBadgePendentes();
+        atualizarDatalist('clientesList',[...new Set(lancamentos.filter(l=>l.cliente).map(l=>l.cliente))]);
+        atualizarDatalist('pedidosList',pedidos.map(p=>p.numero+(p.cliente?' — '+p.cliente:'')));
+        construirFiltroChips();
+      }catch(e2){
+        setSyncError();
+        document.getElementById('loadingScreen').innerHTML=`<div class="logo">rackō</div><div style="font-size:12px;color:var(--red);text-align:center;padding:0 20px">Erro de conexão.<br>${e2.message||'Verifique sua internet.'}</div><button onclick="location.reload()" style="background:var(--gold);color:#1a1508;border:none;padding:10px 24px;border-radius:8px;font-family:'DM Mono',monospace;cursor:pointer;margin-top:8px">recarregar</button>`;
+      }
+    },3000);
   }
 }
 
@@ -1598,8 +1622,170 @@ function renderPedidos(){
         ${semLancamentos?'<div style="font-size:11px;color:var(--text3);padding:4px 0">nenhum lançamento vinculado — pedido pode ser excluído</div>':''}
       </div>
       <button class="btn-add-to-pedido" onclick="adicionarAoPedido('${p.numero}','${p.cliente||''}')">+ adicionar lançamento</button>
+      ${!semLancamentos?`<div style="display:flex;gap:6px;margin-top:6px">
+        <button style="flex:1;background:transparent;border:1px solid rgba(201,168,76,0.3);color:var(--gold);font-family:'DM Mono',monospace;font-size:10px;padding:5px 8px;border-radius:8px;cursor:pointer" onclick="gerarDocParcelas('${p.numero}')">📄 carnê de parcelas</button>
+        ${baixadas.length>0?`<button style="flex:1;background:transparent;border:1px solid rgba(122,184,122,0.3);color:var(--green);font-family:'DM Mono',monospace;font-size:10px;padding:5px 8px;border-radius:8px;cursor:pointer" onclick="gerarRecibo('${p.numero}')">🧾 recibo</button>`:''}
+      </div>`:''}
     </div>`;
   }).join('');
+}
+
+// ── DOCUMENTOS DE PEDIDO ─────────────────────────────────────────────────────
+function getPDFStylesFinanceiro(){
+  return`
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Rajdhani:wght@300;400;500;600&display=swap');
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Rajdhani',sans-serif;color:#2a1f14;background:#fff;padding:22px 38px 18px;max-width:794px;margin:0 auto;font-size:11px;line-height:1.4}
+    @media print{body{padding:8px 24px}@page{margin:5mm;size:A4}}
+    .ph{display:flex;justify-content:space-between;align-items:center;background:#f5ede0;padding:14px 18px;margin-bottom:14px;border-bottom:2px solid #2a1f14}
+    .logo-block{display:flex;align-items:center}
+    .logo-name{font-family:'Courier New',monospace;font-size:17px;color:#2a1f14;letter-spacing:.06em}
+    .logo-sub{font-size:6.5px;letter-spacing:.3em;text-transform:uppercase;color:#7a6040;margin-top:3px}
+    .contact-block{text-align:right}
+    .contact-block p{font-size:8.5px;color:#5a4030;line-height:1.6}
+    .doc-title{font-family:'Courier New',monospace;font-size:9px;letter-spacing:.32em;text-transform:uppercase;color:#8a6830;margin-bottom:10px;border-bottom:1px solid #d4c4a0;padding-bottom:6px}
+    .cgrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#faf5ec;border:1px solid #ddd0b8;margin-bottom:12px}
+    .cc{padding:5px 9px;border-right:1px solid #ddd0b8}.cc:last-child{border-right:none}
+    .cl{font-size:6px;letter-spacing:.22em;text-transform:uppercase;color:#9a8060;margin-bottom:1px}
+    .cv{font-size:10.5px;color:#1e1510;font-weight:600}
+    .st{font-size:6.5px;letter-spacing:.3em;text-transform:uppercase;color:#8a6830;margin:10px 0 6px;padding-bottom:3px;border-bottom:1px solid #d4c4a0}
+    table{width:100%;border-collapse:collapse;margin-top:3px}
+    th{background:#1e1510;color:#e8d5a0;font-size:6.5px;letter-spacing:.18em;text-transform:uppercase;padding:6px 9px;text-align:left}
+    td{padding:5px 9px;font-size:10px;border-bottom:1px solid #e8dcc8;color:#2a1f14}
+    tr:last-child td{border-bottom:none}
+    .amt{font-family:'Cormorant Garamond',serif;font-size:13px;text-align:right;color:#8a6830;font-weight:600}
+    .pago{color:#5a8a5a;font-weight:600}.pendente{color:#a06820}
+    .imp{background:#f5ede0;border:1px solid #d4c4a0;border-left:3px solid #b8923a;padding:6px 9px;font-size:8.5px;color:#3a2d1e;line-height:1.5;margin-top:10px}
+    .footer-text{font-size:8px;color:#7a6040;text-align:center;margin-top:14px;padding-top:8px;border-top:1px solid #d4c4a0}
+    .total-row td{background:#f5ede0;font-weight:600;border-top:2px solid #b8923a}
+    .recibo-box{border:2px solid #2a1f14;padding:14px;margin-top:12px;background:#faf5ec}
+    .recibo-title{font-family:'Courier New',monospace;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#8a6830;margin-bottom:8px;text-align:center}
+    .assinatura{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
+    .ass-linha{border-bottom:1px solid #2a1f14;height:30px;margin-bottom:4px}
+    .ass-label{font-size:7px;letter-spacing:.15em;text-transform:uppercase;color:#9a8060;text-align:center}
+  </style>`;
+}
+
+function buildPDFHeader(titulo){
+  return`<div class="ph">
+    <div class="logo-block">
+      <div style="margin-left:0">
+        <div class="logo-name">rackō</div>
+        <div class="logo-sub">studio de joias e artes</div>
+      </div>
+    </div>
+    <div class="contact-block">
+      <p>CNPJ 40.322.722/0001-02</p>
+      <p>@racko_studio · (61) 99831-1075</p>
+      <p>Ateliê: SHDB QL 32, Lago Sul — Brasília-DF</p>
+      <p>Loja: Torre de TV, Bloco J, 353 — Brasília-DF</p>
+    </div>
+  </div>
+  <div class="doc-title">${titulo}</div>`;
+}
+
+function fmtValDoc(v){return'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtDataDoc(d){if(!d)return'—';const[y,m,dia]=d.split('-');return`${dia}/${m}/${y}`;}
+
+function gerarDocParcelas(numero){
+  const p=pedidos.find(x=>x.numero===numero);if(!p)return;
+  const lancs=lancamentos.filter(l=>l.pedido_id===numero);
+  const todasParcelas=parcelas.filter(pp=>lancs.find(l=>l.id===pp.lancamento_id)&&pp.tipo==='entrada');
+  const total=todasParcelas.reduce((s,pp)=>s+Number(pp.valor),0);
+  const pagas=todasParcelas.filter(pp=>pp.pago);
+  const pendentes=todasParcelas.filter(pp=>!pp.pago);
+  const recebido=pagas.reduce((s,pp)=>s+Number(pp.valor),0);
+
+  const linhas=todasParcelas.map((pp,i)=>{
+    const status=pp.pago
+      ?`<span class="pago">✓ Pago em ${fmtDataDoc(pp.data_baixa||pp.data_vencimento)}</span>`
+      :`<span class="pendente">⏳ Aguardando — vence ${fmtDataDoc(pp.data_vencimento)}</span>`;
+    return`<tr>
+      <td>${pp.label||'Parcela '+(i+1)}</td>
+      <td>${fmtDataDoc(pp.data_vencimento)}</td>
+      <td>${status}</td>
+      <td class="amt">${fmtValDoc(pp.valor)}</td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">${getPDFStylesFinanceiro()}</head><body>
+    ${buildPDFHeader('Carnê de Parcelas')}
+    <div class="cgrid">
+      <div class="cc"><div class="cl">Cliente</div><div class="cv">${p.cliente||'—'}</div></div>
+      <div class="cc"><div class="cl">Pedido</div><div class="cv">#${p.numero}</div></div>
+      <div class="cc"><div class="cl">Total</div><div class="cv">${fmtValDoc(total)}</div></div>
+      <div class="cc"><div class="cl">Situação</div><div class="cv">${pagas.length}/${todasParcelas.length} pagas</div></div>
+    </div>
+    <div class="st">Parcelas</div>
+    <table>
+      <thead><tr><th>Descrição</th><th>Vencimento</th><th>Status</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot>
+        <tr class="total-row"><td colspan="3">Total recebido</td><td class="amt">${fmtValDoc(recebido)}</td></tr>
+        ${pendentes.length>0?`<tr class="total-row"><td colspan="3">Total pendente</td><td class="amt" style="color:#a06820">${fmtValDoc(total-recebido)}</td></tr>`:''}
+        <tr class="total-row"><td colspan="3">Total geral</td><td class="amt">${fmtValDoc(total)}</td></tr>
+      </tfoot>
+    </table>
+    <div class="imp"><strong>rackō studio de joias</strong> — Este documento é um comprovante interno de parcelamento. Os valores e datas foram acordados entre as partes no momento da confirmação do pedido.</div>
+    <div class="footer-text">Agradecemos pela confiança. Qualquer dúvida, entre em contato: (61) 99831-1075 · @racko_studio</div>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),800);
+}
+
+function gerarRecibo(numero){
+  const p=pedidos.find(x=>x.numero===numero);if(!p)return;
+  const lancs=lancamentos.filter(l=>l.pedido_id===numero);
+  const todasParcelas=parcelas.filter(pp=>lancs.find(l=>l.id===pp.lancamento_id)&&pp.tipo==='entrada');
+  const pagas=todasParcelas.filter(pp=>pp.pago);
+  if(!pagas.length){showToast('⚠ Nenhuma parcela baixada ainda');return;}
+  const totalPago=pagas.reduce((s,pp)=>s+Number(pp.valor),0);
+  const total=todasParcelas.reduce((s,pp)=>s+Number(pp.valor),0);
+  const hoje=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+
+  const linhas=pagas.map((pp,i)=>`<tr>
+    <td>${pp.label||'Parcela '+(i+1)}</td>
+    <td>${fmtDataDoc(pp.data_baixa||pp.data_vencimento)}</td>
+    <td>${getNomeConta(pp.conta_baixa||pp.conta)}</td>
+    <td class="amt">${fmtValDoc(pp.valor)}</td>
+  </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">${getPDFStylesFinanceiro()}</head><body>
+    ${buildPDFHeader('Recibo de Pagamento')}
+    <div class="cgrid">
+      <div class="cc"><div class="cl">Cliente</div><div class="cv">${p.cliente||'—'}</div></div>
+      <div class="cc"><div class="cl">Pedido</div><div class="cv">#${p.numero}</div></div>
+      <div class="cc"><div class="cl">Valor pago</div><div class="cv pago">${fmtValDoc(totalPago)}</div></div>
+      <div class="cc"><div class="cl">Data</div><div class="cv">${hoje}</div></div>
+    </div>
+    <div class="recibo-box">
+      <div class="recibo-title">Recibo</div>
+      <p style="font-size:10px;line-height:1.7;color:#3a2d1e">Recebemos de <strong>${p.cliente||'—'}</strong> a importância de <strong>${fmtValDoc(totalPago)}</strong> referente ao pedido <strong>#${p.numero}</strong>${p.descricao?' ('+p.descricao+')':''}, conforme discriminado abaixo.</p>
+    </div>
+    <div class="st" style="margin-top:12px">Pagamentos recebidos</div>
+    <table>
+      <thead><tr><th>Descrição</th><th>Data do pagamento</th><th>Forma</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot>
+        <tr class="total-row"><td colspan="3">Total recebido</td><td class="amt pago">${fmtValDoc(totalPago)}</td></tr>
+        ${totalPago<total?`<tr><td colspan="3" style="font-size:10px;color:#a06820">Saldo restante</td><td class="amt" style="color:#a06820">${fmtValDoc(total-totalPago)}</td></tr>`:'<tr><td colspan="4" style="text-align:center;color:#5a8a5a;font-size:10px;padding:6px">✓ Pedido quitado</td></tr>'}
+      </tfoot>
+    </table>
+    <div class="assinatura">
+      <div><div class="ass-linha"></div><div class="ass-label">Assinatura do cliente</div></div>
+      <div><div class="ass-linha"></div><div class="ass-label">Kenya Costa — rackō studio de joias</div></div>
+    </div>
+    <div class="footer-text">rackō studio de joias · CNPJ 40.322.722/0001-02 · (61) 99831-1075 · @racko_studio<br>Brasília-DF · ${hoje}</div>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),800);
 }
 
 async function deletarPedido(id,numero){
