@@ -1523,29 +1523,48 @@ async function efetivarVenda(id){
 
   const opts=(r.opts||[]).map(o=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--line)"><span style="color:var(--silver)">${o.label}</span><span style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold)">${fmt(o.value)}</span></div>`).join('');
 
+  // Montar opções de valor a partir dos opts (se houver múltiplos)
+  const optsSelector=(r.opts||[]).length>1
+    ?`<div style="margin-bottom:16px">
+        <div class="sec-label" style="margin-bottom:8px">Qual opção o cliente fechou?</div>
+        ${(r.opts||[]).map(o=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:6px;background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);cursor:pointer">
+          <input type="radio" name="efetivarOpt" value="${o.value}" onchange="document.getElementById('efetivarValorFechado').value=this.value;atualizarTotalEfetivar()" style="accent-color:var(--gold)">
+          <span style="color:var(--silver);flex:1">${o.label}</span>
+          <span style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold)">${fmt(o.value)}</span>
+        </label>`).join('')}
+      </div>`
+    :opts?`<div style="margin-bottom:16px">${opts}</div>`:'';
+
   document.getElementById('efetivarBody').innerHTML=`
     <div class="modal-title" style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-style:italic;font-weight:300;color:var(--cream);margin-bottom:4px">Efetivar venda → financeiro</div>
-    <div class="modal-sub" style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:16px">${r.nome||'—'} · ${r.tipo||''} · ${fmt(totalVal)}</div>
+    <div class="modal-sub" style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:16px">${r.nome||'—'} · ${r.tipo||''}</div>
 
-    ${opts?`<div style="margin-bottom:16px">${opts}</div>`:''}
+    ${optsSelector}
+
+    <div class="sec-label" style="margin-bottom:6px">Valor fechado com o cliente</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span style="color:var(--muted);font-size:12px">R$</span>
+      <input type="number" id="efetivarValorFechado" value="${(r.opts||[]).length===1?totalVal:''}" placeholder="informe o valor acordado" step="0.01" inputmode="decimal"
+        oninput="atualizarTotalEfetivar()"
+        style="flex:1;background:#1e1a14;border:1px solid rgba(201,168,76,.55);color:var(--cream);font-family:'Cormorant Garamond',serif;font-size:1.2rem;padding:10px 14px;outline:none">
+    </div>
 
     <div class="sec-label">Configure as parcelas de recebimento</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
       Informe como será o recebimento — cada parcela pode ter uma conta e data diferentes.
-      <br>A soma das parcelas deve fechar o valor total de <strong style="color:var(--gold)">${fmt(totalVal)}</strong>.
     </div>
 
     <div id="efetivarParcelasContainer"></div>
     <button onclick="addEfetivarParcela()" style="background:transparent;border:1px dashed rgba(201,168,76,.4);color:var(--gold);font-family:'Rajdhani',sans-serif;font-size:11px;letter-spacing:.2em;text-transform:uppercase;padding:8px 14px;cursor:pointer;width:100%;margin-bottom:12px">+ adicionar parcela</button>
 
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-top:1px solid var(--line);margin-bottom:16px">
-      <span style="color:var(--muted)">total informado</span>
+      <span style="color:var(--muted)">total informado nas parcelas</span>
       <span id="efetivarTotal" style="color:var(--gold-light);font-family:'Cormorant Garamond',serif;font-size:1.1rem">R$ 0,00</span>
     </div>
     <div id="efetivarStatus" style="font-size:11px;color:var(--muted);margin-bottom:12px;text-align:center"></div>
 
     <div style="display:flex;gap:10px">
-      <button onclick="confirmarEfetivar('${id}',${totalVal})" style="flex:2;background:var(--gold);border:none;color:var(--black);font-family:'Cormorant Garamond',serif;font-size:15px;font-style:italic;font-weight:600;letter-spacing:.12em;padding:14px;cursor:pointer">confirmar e criar pedido →</button>
+      <button onclick="confirmarEfetivarFechado('${id}')" style="flex:2;background:var(--gold);border:none;color:var(--black);font-family:'Cormorant Garamond',serif;font-size:15px;font-style:italic;font-weight:600;letter-spacing:.12em;padding:14px;cursor:pointer">confirmar e criar pedido →</button>
       <button onclick="document.getElementById('efetivarOverlay').style.display='none'" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:11px;letter-spacing:.2em;text-transform:uppercase;padding:14px;cursor:pointer">cancelar</button>
     </div>`;
 
@@ -1553,8 +1572,14 @@ async function efetivarVenda(id){
   document.getElementById('modalOverlay').style.display='none';
   document.getElementById('efetivarOverlay').style.display='flex';
 
-  // Adicionar primeira parcela automaticamente
-  addEfetivarParcela(totalVal);
+  // Adicionar primeira parcela sem valor pré-preenchido (aguarda seleção do valor fechado)
+  addEfetivarParcela((r.opts||[]).length===1?totalVal:'');
+}
+
+function confirmarEfetivarFechado(id){
+  const valorFechado=parseFloat(document.getElementById('efetivarValorFechado')?.value)||0;
+  if(!valorFechado){showToast('⚠ Informe o valor fechado com o cliente');return}
+  confirmarEfetivar(id,valorFechado);
 }
 
 function addEfetivarParcela(valorSugerido=''){
@@ -1591,8 +1616,13 @@ function removeEfetivarParcela(id){
 function atualizarTotalEfetivar(){
   const soma=efetivarParcelasRows.reduce((s,id)=>s+(parseFloat(document.getElementById('ep-valor-'+id)?.value)||0),0);
   const el=document.getElementById('efetivarTotal');
-  const st=document.getElementById('efetivarStatus');
+  const vf=parseFloat(document.getElementById('efetivarValorFechado')?.value)||0;
   if(el)el.textContent=fmt(soma);
+  // Se houver só uma parcela e o valor fechado mudou, atualiza automaticamente a parcela
+  if(vf>0&&efetivarParcelasRows.length===1){
+    const primeiraInput=document.getElementById('ep-valor-'+efetivarParcelasRows[0]);
+    if(primeiraInput&&!parseFloat(primeiraInput.value)){primeiraInput.value=vf;atualizarTotalEfetivar();}
+  }
 }
 
 function fecharEfetivarModal(e){if(e.target===document.getElementById('efetivarOverlay'))document.getElementById('efetivarOverlay').style.display='none'}
