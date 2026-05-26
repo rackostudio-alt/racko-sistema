@@ -901,7 +901,7 @@ function editarOrcamento(id){
   document.getElementById('f-valid').value=r.valid||'5';
   if(r.pgto){
     // Reverter pgto de HTML para texto simples
-    const pgtoTexto=(r.pgto||'').replace(/<br\s*\/?>/gi,'\n').replace(/^•\s*/gm,'').replace(/<[^>]+>/g,'').trim();
+    const pgtoTexto=(r.pgto||'').replace(/<br[^>]*>/gi,'\n').replace(/^[•\s]*/gm,'').replace(/<[^>]+>/g,'').trim();
     document.getElementById('f-pgto').value=pgtoTexto;
   }
 
