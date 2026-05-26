@@ -434,6 +434,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-
           <span id="btnVozLabel">lançar por voz</span>
         </button>
         <div id="vozStatus" style="display:none;font-size:11px;color:var(--text3,#a89880);text-align:center;margin-top:6px;letter-spacing:.05em"></div>
+        <!-- CONFIRMAÇÃO DO TEXTO CAPTADO -->
+        <div id="vozConfirmar" style="display:none;margin-top:10px;background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.25);padding:12px;border-radius:4px">
+          <div style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold,#d4a83a);margin-bottom:6px">texto captado — corrija se necessário:</div>
+          <textarea id="vozTextoConfirmar" rows="3" style="width:100%;background:#1a1710;border:1px solid rgba(201,168,76,.3);color:var(--text,#e8d5a0);font-family:'DM Mono',monospace;font-size:12px;padding:8px;resize:vertical;outline:none;box-sizing:border-box"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button onclick="processarTextoVoz()" style="flex:2;background:var(--gold,#d4a83a);border:none;color:#1a1508;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;padding:10px;cursor:pointer;border-radius:2px">✓ interpretar e preencher</button>
+            <button onclick="cancelarVoz()" style="flex:1;background:transparent;border:1px solid rgba(255,255,255,.15);color:var(--text3,#a89880);font-family:'DM Mono',monospace;font-size:11px;padding:10px;cursor:pointer;border-radius:2px">cancelar</button>
+          </div>
+        </div>
       </div>
 
       <div class="alert-box info show" style="margin-bottom:12px">
@@ -2271,15 +2280,12 @@ function iniciarVoz(){
     const textoAtual = (_textoFinal + interino).trim();
     if(textoAtual) document.getElementById('vozStatus').textContent = '🎤 "' + textoAtual + '"';
 
-    // Timer de silêncio: 1.5s sem falar = processa
+    // Timer de silêncio: 1.5s sem falar = mostra para confirmação
     clearTimeout(_silencioTimer);
     if(_textoFinal.trim()){
-      _silencioTimer = setTimeout(async () => {
+      _silencioTimer = setTimeout(() => {
         pararVoz();
-        const texto = _textoFinal.trim();
-        document.getElementById('vozStatus').style.display = 'block';
-        document.getElementById('vozStatus').textContent = '🤖 interpretando: "' + texto + '"…';
-        await interpretarComIA(texto);
+        mostrarConfirmacaoVoz(_textoFinal.trim());
       }, 1500);
     }
   };
@@ -2299,9 +2305,8 @@ function iniciarVoz(){
 
   _vozRecognition.onend = () => {
     if(_vozOuvindo && _textoFinal.trim()){
-      // Capturou algo — processa
       pararVoz();
-      interpretarComIA(_textoFinal.trim());
+      mostrarConfirmacaoVoz(_textoFinal.trim());
     } else if(_vozOuvindo){
       pararVoz();
       document.getElementById('vozStatus').textContent = '⚠ Nenhuma fala captada. Tente novamente.';
@@ -2309,6 +2314,28 @@ function iniciarVoz(){
   };
 
   _vozRecognition.start();
+}
+
+function mostrarConfirmacaoVoz(texto){
+  document.getElementById('vozStatus').style.display='none';
+  document.getElementById('vozConfirmar').style.display='block';
+  document.getElementById('vozTextoConfirmar').value=texto;
+  document.getElementById('vozTextoConfirmar').focus();
+}
+
+function cancelarVoz(){
+  document.getElementById('vozConfirmar').style.display='none';
+  document.getElementById('vozTextoConfirmar').value='';
+  document.getElementById('vozStatus').style.display='none';
+}
+
+async function processarTextoVoz(){
+  const texto=document.getElementById('vozTextoConfirmar').value.trim();
+  if(!texto){showToast('⚠ Texto vazio');return;}
+  document.getElementById('vozConfirmar').style.display='none';
+  document.getElementById('vozStatus').style.display='block';
+  document.getElementById('vozStatus').textContent='🤖 interpretando…';
+  await interpretarComIA(texto);
 }
 
 function pararVoz(){
