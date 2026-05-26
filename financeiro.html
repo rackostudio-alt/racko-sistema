@@ -845,7 +845,19 @@ const sbUpsert=async(t,d,c)=>{const r=await fetch(API(t)+'?on_conflict='+c,{meth
 
 const setSyncing=()=>{document.getElementById('syncDot').className='sync-dot syncing';document.getElementById('syncLabel').textContent='sync…'};
 const setSynced=()=>{document.getElementById('syncDot').className='sync-dot';document.getElementById('syncLabel').textContent='ok'};
-const setSyncError=()=>{document.getElementById('syncDot').className='sync-dot error';document.getElementById('syncLabel').textContent='erro'};
+const setSyncError=()=>{
+  document.getElementById('syncDot').className='sync-dot error';
+  document.getElementById('syncLabel').textContent='erro';
+  // Tentar reconectar automaticamente após 5 segundos
+  clearTimeout(window._syncRetryTimer);
+  window._syncRetryTimer=setTimeout(async()=>{
+    try{
+      setSyncing();
+      await sbGet('lancamentos','order=created_at.desc&limit=1');
+      setSynced();
+    }catch(e){ setSyncError(); }
+  },5000);
+};
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init(){
@@ -2266,48 +2278,97 @@ function pararVoz(){
 }
 
 async function interpretarComIA(texto){
-  // Montar contexto das contas disponíveis para a IA
-  const contasDisponiveis = contasConfig.map(c => c.nome || c.chave).join(', ') || 'Conta PJ, Caixa Físico';
   const hoje = new Date().toISOString().split('T')[0];
+  const t = texto.toLowerCase();
 
-  const prompt = `Você é um assistente financeiro da rackō studio de joias. Analise o comando de voz abaixo e extraia os dados para um lançamento financeiro.
+  // ── TIPO ──────────────────────────────────────────────────
+  const palavrasEntrada = ['recebi','entrada','recebimento','venda','vendeu','vendemos','paguei não','pagou não','pix recebido','depositou','transferiu para mim'];
+  const palavrasSaida   = ['paguei','pagamos','saída','saida','comprei','compra','despesa','gasto','gastei','fornecedor','aluguel','enviei','transferi'];
+  let tipo = 'entrada';
+  if(palavrasSaida.some(p => t.includes(p))) tipo = 'saida';
+  if(palavrasEntrada.some(p => t.includes(p))) tipo = 'entrada';
 
-Contas disponíveis: ${contasDisponiveis}
-Data de hoje: ${hoje}
-
-Comando de voz: "${texto}"
-
-Responda APENAS com JSON válido, sem texto adicional, no formato:
-{
-  "tipo": "entrada" ou "saida",
-  "descricao": "descrição do lançamento",
-  "cliente": "nome do cliente ou null",
-  "valor": número sem formatação (ex: 950),
-  "data": "YYYY-MM-DD" (use hoje se não mencionado),
-  "conta": "nome da conta mais próxima das disponíveis",
-  "obs": "observação extra ou null",
-  "confianca": "alta", "media" ou "baixa"
-}`;
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await resp.json();
-    const raw = data.content?.[0]?.text || '';
-    const clean = raw.replace(/```json|```/g,'').trim();
-    const lanc = JSON.parse(clean);
-    preencherFormVoz(lanc, texto);
-  } catch(e) {
-    document.getElementById('vozStatus').textContent = '⚠ Não consegui interpretar. Preencha manualmente.';
-    console.error('Erro IA voz:', e);
+  // ── VALOR ─────────────────────────────────────────────────
+  let valor = 0;
+  const matchValor = t.match(/r\$\s*([\d.,]+)|(\d+[\d.,]*)\s*reais|([\d]+[.,]\d{2})/);
+  if(matchValor){
+    const raw = (matchValor[1]||matchValor[2]||matchValor[3]).replace(/\./g,'').replace(',','.');
+    valor = parseFloat(raw)||0;
   }
+  if(!valor){
+    const nums = t.match(/(\d{2,6})/g);
+    if(nums) valor = parseFloat(nums[0])||0;
+  }
+
+  // ── DATA ──────────────────────────────────────────────────
+  let data = hoje;
+  const matchData = t.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+  if(matchData){
+    const d = matchData[1].padStart(2,'0');
+    const m = matchData[2].padStart(2,'0');
+    const a = matchData[3] ? (matchData[3].length===2?'20'+matchData[3]:matchData[3]) : hoje.split('-')[0];
+    data = `${a}-${m}-${d}`;
+  }
+  if(t.includes('ontem')){
+    const ontem = new Date(); ontem.setDate(ontem.getDate()-1);
+    data = ontem.toISOString().split('T')[0];
+  }
+  if(t.includes('hoje')) data = hoje;
+
+  // ── CONTA ─────────────────────────────────────────────────
+  let conta = contasConfig[0]?.nome || '';
+  const nomesConta = contasConfig.map(c=>({id:c.id,nome:(c.nome||'').toLowerCase()}));
+  for(const c of nomesConta){
+    const palavras = c.nome.split(/\s+/);
+    if(palavras.some(p=>p.length>2 && t.includes(p))){ conta = contasConfig.find(x=>x.id===c.id)?.nome||conta; break; }
+  }
+  // Atalhos comuns
+  if(t.includes('pj') || t.includes('conta pj')) conta = contasConfig.find(c=>(c.nome||'').toLowerCase().includes('pj'))?.nome || conta;
+  if(t.includes('caixa')) conta = contasConfig.find(c=>(c.nome||'').toLowerCase().includes('caixa'))?.nome || conta;
+  if(t.includes('pix')) conta = contasConfig.find(c=>(c.nome||'').toLowerCase().includes('pix'||(c.nome||'').toLowerCase().includes('pj')))?.nome || conta;
+
+  // ── CLIENTE ───────────────────────────────────────────────
+  let cliente = null;
+  const preposicoes = ['da ','do ','de ','para ','pro ','pra '];
+  for(const prep of preposicoes){
+    const idx = t.indexOf(prep);
+    if(idx>=0){
+      const resto = texto.substring(idx+prep.length).trim();
+      const nomeCandidate = resto.split(/[,\.]/)[0].trim();
+      // Verificar se parece um nome (começa com maiúscula no texto original)
+      const idxOrig = texto.toLowerCase().indexOf(prep);
+      const nomeOrig = texto.substring(idxOrig+prep.length).split(/[,\.]/)[0].trim();
+      if(nomeOrig.length>2 && nomeOrig.length<40 && /^[A-ZÀ-Ú]/.test(nomeOrig)){
+        cliente = nomeOrig; break;
+      }
+    }
+  }
+  // Verificar clientes conhecidos
+  const clientesConhecidos = [...new Set(lancamentos.filter(l=>l.cliente).map(l=>l.cliente))];
+  for(const c of clientesConhecidos){
+    if(t.includes(c.toLowerCase().split(' ')[0].toLowerCase())){ cliente = c; break; }
+  }
+
+  // ── DESCRIÇÃO ─────────────────────────────────────────────
+  let descricao = texto;
+  // Remover partes já extraídas para limpar a descrição
+  descricao = descricao
+    .replace(/recebi|paguei|comprei|entrada|saída/gi,'')
+    .replace(/r\$\s*[\d.,]+/gi,'')
+    .replace(/[\d]+ reais/gi,'')
+    .replace(/pix|cartão|espécie|dinheiro/gi,'')
+    .replace(/conta pj|caixa físico|santander|caixa/gi,'')
+    .replace(/hoje|ontem/gi,'')
+    .replace(/\s+/g,' ').trim();
+  if(!descricao || descricao.length < 3) descricao = texto;
+
+  // ── CONFIANÇA ─────────────────────────────────────────────
+  let confianca = 'alta';
+  if(!valor) confianca = 'baixa';
+  else if(!cliente) confianca = 'media';
+
+  const lanc = { tipo, descricao, cliente, valor, data, conta, obs: null, confianca };
+  preencherFormVoz(lanc, texto);
 }
 
 function preencherFormVoz(lanc, textoOriginal){
