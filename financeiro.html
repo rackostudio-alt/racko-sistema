@@ -807,6 +807,8 @@ const CATS=[
   {chave:'taxa',nome:'Taxas / impostos',grupo:'racko',tipo:'saida'},
   {chave:'prolabore',nome:'Pró-labore Kenya',grupo:'racko',tipo:'saida'},
   {chave:'prolabore2',nome:'Pró-labore marido',grupo:'racko',tipo:'saida'},
+  {chave:'comissao',nome:'Comissões / repasses',grupo:'racko',tipo:'saida'},
+  {chave:'prestador',nome:'Prestadores de serviço',grupo:'racko',tipo:'saida'},
   {chave:'outros_saida',nome:'Outras saídas',grupo:'racko',tipo:'saida'},
   {chave:'pessoal_salario',nome:'Salário / renda pessoal',grupo:'pessoal',tipo:'entrada'},
   {chave:'pessoal_outros_ent',nome:'Outras entradas pessoais',grupo:'pessoal',tipo:'entrada'},
@@ -2368,46 +2370,76 @@ async function interpretarComIA(texto){
   if(t.includes('pix')) conta = contasConfig.find(c=>(c.nome||'').toLowerCase().includes('pix'||(c.nome||'').toLowerCase().includes('pj')))?.nome || conta;
 
   // ── CLIENTE ───────────────────────────────────────────────
+  // Prioridade 1: "para [Nome]" — fornecedor/cliente direto na frase
   let cliente = null;
-  const preposicoes = ['da ','do ','de ','para ','pro ','pra '];
-  for(const prep of preposicoes){
-    const idx = t.indexOf(prep);
-    if(idx>=0){
-      const resto = texto.substring(idx+prep.length).trim();
-      const nomeCandidate = resto.split(/[,\.]/)[0].trim();
-      // Verificar se parece um nome (começa com maiúscula no texto original)
-      const idxOrig = texto.toLowerCase().indexOf(prep);
-      const nomeOrig = texto.substring(idxOrig+prep.length).split(/[,\.]/)[0].trim();
-      if(nomeOrig.length>2 && nomeOrig.length<40 && /^[A-ZÀ-Ú]/.test(nomeOrig)){
-        cliente = nomeOrig; break;
-      }
-    }
+  const matchPara = texto.match(/(?:para|pro|pra)\s+([A-ZÀ-Úa-zà-ú][A-ZÀ-Úa-zà-ú\s]{2,40?})(?:\s+na\s+|\s+no\s+|\s+em\s+|\s+referente|,|\.|$)/i);
+  if(matchPara){
+    cliente = matchPara[1].trim();
   }
-  // Verificar clientes conhecidos
-  const clientesConhecidos = [...new Set(lancamentos.filter(l=>l.cliente).map(l=>l.cliente))];
-  for(const c of clientesConhecidos){
-    if(t.includes(c.toLowerCase().split(' ')[0].toLowerCase())){ cliente = c; break; }
+  // Prioridade 2: "da/do [Nome]" — cliente que pagou
+  if(!cliente){
+    const matchDa = texto.match(/(?:^|\s)(?:da|do|de)\s+([A-ZÀ-Ú][a-zA-ZÀ-Úà-ú\s]{2,30?})(?:\s*[,\.\-]|\s+(?:pix|cartão|conta|via|referente)|$)/i);
+    if(matchDa) cliente = matchDa[1].trim();
+  }
+  // Prioridade 3: clientes conhecidos que aparecem na frase
+  if(!cliente){
+    const clientesConhecidos = [...new Set(lancamentos.filter(l=>l.cliente).map(l=>l.cliente))];
+    for(const c of clientesConhecidos){
+      const primeiroNome = c.split(' ')[0].toLowerCase();
+      if(primeiroNome.length > 2 && t.includes(primeiroNome)){ cliente = c; break; }
+    }
   }
 
   // ── DESCRIÇÃO ─────────────────────────────────────────────
-  let descricao = texto;
-  // Remover partes já extraídas para limpar a descrição
-  descricao = descricao
-    .replace(/recebi|paguei|comprei|entrada|saída/gi,'')
-    .replace(/r\$\s*[\d.,]+/gi,'')
-    .replace(/[\d]+ reais/gi,'')
-    .replace(/pix|cartão|espécie|dinheiro/gi,'')
-    .replace(/conta pj|caixa físico|santander|caixa/gi,'')
-    .replace(/hoje|ontem/gi,'')
-    .replace(/\s+/g,' ').trim();
+  // Prioridade: "referente a/ao [descrição]"
+  let descricao = '';
+  const matchRef = texto.match(/referente\s+(?:a|ao|à|às|aos)\s+(.+?)(?:\.|,|$)/i);
+  if(matchRef){
+    descricao = matchRef[1].trim();
+  }
+  // Se não tem "referente", usar tipo + valor como descrição base
+  if(!descricao){
+    descricao = texto
+      .replace(/(?:recebi|paguei|comprei|gastei|entrada|saída)/gi,'')
+      .replace(/r\$\s*[\d.,]+(?:\s*centavos)?/gi,'')
+      .replace(/[\d]+(?:[.,]\d+)?\s*reais?(?:\s*(?:e|com)?\s*\d+\s*centavos)?/gi,'')
+      .replace(/(?:pix|cartão|espécie|dinheiro)/gi,'')
+      .replace(/(?:para|pro|pra)\s+[\w\s]{2,40}/i,'')
+      .replace(/(?:da|do|de)\s+[A-ZÀ-Úa-zà-ú][\w\s]{2,30}/i,'')
+      .replace(/na\s+conta\s+[\w\s]+/gi,'')
+      .replace(/hoje|ontem/gi,'')
+      .replace(/\s+/g,' ').trim();
+  }
   if(!descricao || descricao.length < 3) descricao = texto;
+
+  // ── CATEGORIA ─────────────────────────────────────────────
+  let categoria = '';
+  const cats = [...document.querySelectorAll('#catInput option')].map(o=>({value:o.value,label:o.textContent.toLowerCase()}));
+  // Palavras-chave para matching
+  const catKeywords = {
+    'venda': ['venda','peça','joia','anel','brinco','colar','aliança','pulseira','pingente','conjunto'],
+    'material': ['material','prata','ouro','fio','chapa','fecho','corrente','pedra','insumo','fornecedor'],
+    'aluguel': ['aluguel','loja','ateliê','espaço','diária','diaria','feira','stand'],
+    'transporte': ['transporte','uber','taxi','gasolina','combustível','entrega','motoboy'],
+    'alimentação': ['alimentação','almoço','lanche','cafe','refeição','restaurante'],
+    'marketing': ['marketing','instagram','foto','publicidade','arte','designer','anúncio'],
+    'bancária': ['taxa','tarifa','banco','pix','ted','transferência','juros'],
+    'comissao': ['comissão','comissao','repasse','repassei','vendedor','revendedor','consignado','diária','diaria','loja de artesanato'],
+    'prestador': ['prestador','prestadores','serviço','serviço','freelancer','autônomo','autonomo','fotógrafo','designer','assistente','motoboy','entregador'],
+  };
+  for(const [key, keywords] of Object.entries(catKeywords)){
+    if(keywords.some(kw => t.includes(kw))){
+      const match = cats.find(c => c.label.includes(key) || c.value === key);
+      if(match){ categoria = match.value; break; }
+    }
+  }
 
   // ── CONFIANÇA ─────────────────────────────────────────────
   let confianca = 'alta';
   if(!valor) confianca = 'baixa';
   else if(!cliente) confianca = 'media';
 
-  const lanc = { tipo, descricao, cliente, valor, data, conta, obs: null, confianca };
+  const lanc = { tipo, descricao, cliente, valor, data, conta, categoria, obs: null, confianca };
   preencherFormVoz(lanc, texto);
 }
 
@@ -2425,6 +2457,7 @@ function preencherFormVoz(lanc, textoOriginal){
   if(lanc.valor) document.getElementById('valorInput').value = lanc.valor;
   if(lanc.data) document.getElementById('dataInput').value = lanc.data;
   if(lanc.obs) document.getElementById('obsInput').value = lanc.obs;
+  if(lanc.categoria) document.getElementById('catInput').value = lanc.categoria;
 
   // Atualizar parcelas
   atualizarInfoParcelas();
