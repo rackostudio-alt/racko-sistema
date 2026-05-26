@@ -2242,30 +2242,70 @@ function iniciarVoz(){
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _vozRecognition = new SpeechRecognition();
   _vozRecognition.lang = 'pt-BR';
-  _vozRecognition.continuous = false;
-  _vozRecognition.interimResults = false;
+  _vozRecognition.continuous = true;
+  _vozRecognition.interimResults = true;
+  _vozRecognition.maxAlternatives = 1;
 
   _vozOuvindo = true;
+  let _textoFinal = '';
+  let _silencioTimer = null;
+
   document.getElementById('btnVoz').style.background = 'rgba(201,168,76,.22)';
   document.getElementById('btnVoz').style.borderColor = 'var(--gold,#d4a83a)';
   document.getElementById('btnVozLabel').textContent = '🔴 ouvindo… clique para parar';
   document.getElementById('vozStatus').style.display = 'block';
-  document.getElementById('vozStatus').textContent = 'fale agora — ex: "recebi R$ 950 da Isabella, PIX, conta PJ, pingente prata"';
+  document.getElementById('vozStatus').textContent = 'fale agora — ex: "recebi R$ 950 da Isabella, PIX, conta PJ"';
 
   _vozRecognition.onresult = async (e) => {
-    const texto = e.results[0][0].transcript;
-    pararVoz();
-    document.getElementById('vozStatus').style.display = 'block';
-    document.getElementById('vozStatus').textContent = '🤖 interpretando: "' + texto + '"…';
-    await interpretarComIA(texto);
+    let interino = '';
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      if(e.results[i].isFinal){
+        _textoFinal += e.results[i][0].transcript + ' ';
+      } else {
+        interino = e.results[i][0].transcript;
+      }
+    }
+    // Mostrar o que está sendo captado em tempo real
+    const textoAtual = (_textoFinal + interino).trim();
+    if(textoAtual) document.getElementById('vozStatus').textContent = '🎤 "' + textoAtual + '"';
+
+    // Timer de silêncio: 1.5s sem falar = processa
+    clearTimeout(_silencioTimer);
+    if(_textoFinal.trim()){
+      _silencioTimer = setTimeout(async () => {
+        pararVoz();
+        const texto = _textoFinal.trim();
+        document.getElementById('vozStatus').style.display = 'block';
+        document.getElementById('vozStatus').textContent = '🤖 interpretando: "' + texto + '"…';
+        await interpretarComIA(texto);
+      }, 1500);
+    }
   };
 
   _vozRecognition.onerror = (e) => {
-    pararVoz();
-    showToast('⚠ Erro no microfone: ' + e.error);
+    if(e.error === 'no-speech'){
+      document.getElementById('vozStatus').textContent = '⚠ Nenhuma fala detectada. Tente novamente.';
+      pararVoz();
+    } else if(e.error === 'not-allowed'){
+      showToast('⚠ Permissão de microfone negada.');
+      pararVoz();
+    } else {
+      pararVoz();
+      showToast('⚠ Erro: ' + e.error);
+    }
   };
 
-  _vozRecognition.onend = () => { if(_vozOuvindo) pararVoz(); };
+  _vozRecognition.onend = () => {
+    if(_vozOuvindo && _textoFinal.trim()){
+      // Capturou algo — processa
+      pararVoz();
+      interpretarComIA(_textoFinal.trim());
+    } else if(_vozOuvindo){
+      pararVoz();
+      document.getElementById('vozStatus').textContent = '⚠ Nenhuma fala captada. Tente novamente.';
+    }
+  };
+
   _vozRecognition.start();
 }
 
