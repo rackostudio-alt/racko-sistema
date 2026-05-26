@@ -427,6 +427,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-
 
     <!-- LANÇAR -->
     <div class="page" id="page-lancar">
+      <!-- BOTÃO VOZ -->
+      <div id="vozContainer" style="margin-bottom:14px">
+        <button id="btnVoz" onclick="iniciarVoz()" style="width:100%;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.35);color:var(--gold,#d4a83a);font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;padding:13px 16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;border-radius:4px;transition:all .2s">
+          <span style="font-size:18px">🎤</span>
+          <span id="btnVozLabel">lançar por voz</span>
+        </button>
+        <div id="vozStatus" style="display:none;font-size:11px;color:var(--text3,#a89880);text-align:center;margin-top:6px;letter-spacing:.05em"></div>
+      </div>
+
       <div class="alert-box info show" style="margin-bottom:12px">
         <div class="alert-title">💡 novo modelo de lançamento</div>
         <div class="alert-items">
@@ -2204,6 +2213,151 @@ const fmtData=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-di
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}
 
 init();
+
+// ══════════════════════════════
+// LANÇAMENTO POR VOZ COM IA
+// ══════════════════════════════
+let _vozRecognition = null;
+let _vozOuvindo = false;
+
+function iniciarVoz(){
+  if(!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)){
+    showToast('⚠ Seu navegador não suporta voz. Use o Chrome.');
+    return;
+  }
+  if(_vozOuvindo){ pararVoz(); return; }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _vozRecognition = new SpeechRecognition();
+  _vozRecognition.lang = 'pt-BR';
+  _vozRecognition.continuous = false;
+  _vozRecognition.interimResults = false;
+
+  _vozOuvindo = true;
+  document.getElementById('btnVoz').style.background = 'rgba(201,168,76,.22)';
+  document.getElementById('btnVoz').style.borderColor = 'var(--gold,#d4a83a)';
+  document.getElementById('btnVozLabel').textContent = '🔴 ouvindo… clique para parar';
+  document.getElementById('vozStatus').style.display = 'block';
+  document.getElementById('vozStatus').textContent = 'fale agora — ex: "recebi R$ 950 da Isabella, PIX, conta PJ, pingente prata"';
+
+  _vozRecognition.onresult = async (e) => {
+    const texto = e.results[0][0].transcript;
+    pararVoz();
+    document.getElementById('vozStatus').style.display = 'block';
+    document.getElementById('vozStatus').textContent = '🤖 interpretando: "' + texto + '"…';
+    await interpretarComIA(texto);
+  };
+
+  _vozRecognition.onerror = (e) => {
+    pararVoz();
+    showToast('⚠ Erro no microfone: ' + e.error);
+  };
+
+  _vozRecognition.onend = () => { if(_vozOuvindo) pararVoz(); };
+  _vozRecognition.start();
+}
+
+function pararVoz(){
+  _vozOuvindo = false;
+  if(_vozRecognition) try{ _vozRecognition.stop(); }catch(e){}
+  document.getElementById('btnVoz').style.background = 'rgba(201,168,76,.08)';
+  document.getElementById('btnVoz').style.borderColor = 'rgba(201,168,76,.35)';
+  document.getElementById('btnVozLabel').textContent = '🎤 lançar por voz';
+}
+
+async function interpretarComIA(texto){
+  // Montar contexto das contas disponíveis para a IA
+  const contasDisponiveis = contasConfig.map(c => c.nome || c.chave).join(', ') || 'Conta PJ, Caixa Físico';
+  const hoje = new Date().toISOString().split('T')[0];
+
+  const prompt = `Você é um assistente financeiro da rackō studio de joias. Analise o comando de voz abaixo e extraia os dados para um lançamento financeiro.
+
+Contas disponíveis: ${contasDisponiveis}
+Data de hoje: ${hoje}
+
+Comando de voz: "${texto}"
+
+Responda APENAS com JSON válido, sem texto adicional, no formato:
+{
+  "tipo": "entrada" ou "saida",
+  "descricao": "descrição do lançamento",
+  "cliente": "nome do cliente ou null",
+  "valor": número sem formatação (ex: 950),
+  "data": "YYYY-MM-DD" (use hoje se não mencionado),
+  "conta": "nome da conta mais próxima das disponíveis",
+  "obs": "observação extra ou null",
+  "confianca": "alta", "media" ou "baixa"
+}`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    const raw = data.content?.[0]?.text || '';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const lanc = JSON.parse(clean);
+    preencherFormVoz(lanc, texto);
+  } catch(e) {
+    document.getElementById('vozStatus').textContent = '⚠ Não consegui interpretar. Preencha manualmente.';
+    console.error('Erro IA voz:', e);
+  }
+}
+
+function preencherFormVoz(lanc, textoOriginal){
+  // Navegar para aba lançar
+  showPage('lancar', document.querySelector('[onclick*="lancar"]'));
+
+  // Tipo
+  if(lanc.tipo === 'entrada') setTipo('entrada');
+  else setTipo('saida');
+
+  // Campos
+  if(lanc.descricao) document.getElementById('descInput').value = lanc.descricao;
+  if(lanc.cliente) document.getElementById('clienteInput').value = lanc.cliente;
+  if(lanc.valor) document.getElementById('valorInput').value = lanc.valor;
+  if(lanc.data) document.getElementById('dataInput').value = lanc.data;
+  if(lanc.obs) document.getElementById('obsInput').value = lanc.obs;
+
+  // Atualizar parcelas
+  atualizarInfoParcelas();
+
+  // Conta na primeira parcela (se existir)
+  setTimeout(() => {
+    const contaSelects = document.querySelectorAll('.parcela-conta');
+    if(contaSelects.length === 0){ addParcelaRow(); }
+    setTimeout(() => {
+      const selects = document.querySelectorAll('.parcela-conta');
+      if(selects.length > 0 && lanc.conta){
+        // Buscar opção mais próxima
+        const opts = [...selects[0].options];
+        const match = opts.find(o => o.text.toLowerCase().includes(lanc.conta.toLowerCase().substring(0,4)));
+        if(match) selects[0].value = match.value;
+        // Preencher valor da parcela também
+        const valorInputs = document.querySelectorAll('.parcela-valor');
+        if(valorInputs.length > 0 && lanc.valor) valorInputs[0].value = lanc.valor;
+      }
+      atualizarInfoParcelas();
+    }, 150);
+  }, 100);
+
+  // Feedback
+  const confiancaEmoji = lanc.confianca === 'alta' ? '✅' : lanc.confianca === 'media' ? '⚠️' : '❓';
+  document.getElementById('vozStatus').style.display = 'block';
+  document.getElementById('vozStatus').textContent = confiancaEmoji + ' formulário preenchido — confira os dados antes de registrar';
+  if(lanc.confianca !== 'alta'){
+    showToast('⚠ Confiança ' + lanc.confianca + ' — verifique os campos antes de salvar');
+  } else {
+    showToast('✓ Voz interpretada! Confira e registre.');
+  }
+}
+
 </script>
 </body>
 </html>
