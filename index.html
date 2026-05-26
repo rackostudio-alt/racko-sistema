@@ -309,6 +309,12 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
 ════════════════════════════════════ -->
 <div class="screen active" id="screen-orcamento">
 
+  <!-- BANNER MODO EDIÇÃO -->
+  <div id="edit-mode-banner" style="display:none;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.4);padding:10px 16px;margin-top:16px;display:none;align-items:center;justify-content:space-between;gap:12px">
+    <span style="font-size:12px;color:var(--gold);letter-spacing:.1em">✎ modo edição — editando orçamento existente</span>
+    <button onclick="cancelarEdicao()" style="background:transparent;border:1px solid rgba(201,168,76,.3);color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:4px 12px;cursor:pointer">cancelar edição</button>
+  </div>
+
   <!-- SUB TABS -->
   <div class="crm-tabs" style="margin-top:24px">
     <button class="crm-tab active" onclick="goOrcTab('calc')">Calculadora</button>
@@ -674,6 +680,7 @@ function goScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
   if(id==='orcamento')resetOrcId(); // novo orçamento = novo ID de sessão
+  if(id!=='orcamento'){const b=document.getElementById('edit-mode-banner');if(b)b.style.display='none';}
   if(id==='crm'){renderMetrics();renderLista();}
   if(id==='relatorio')renderRelatorio();
 }
@@ -826,7 +833,9 @@ function getPDFData(){
     fValid:document.getElementById('f-valid').value||'5',
     pgtoLines:(document.getElementById('f-pgto').value||'').split('\n').filter(l=>l.trim()).map(l=>`• ${l.trim()}`).join('<br>'),
     includes:[...document.querySelectorAll('.inc-tag.selected')].map(t=>t.textContent.trim()),
-    opts:[...document.querySelectorAll('.client-opt-row')].map(r=>{return{label:r.querySelector('.opt-label').value||'Opção',value:parseFloat(r.querySelector('.opt-value').value)||0};}).filter(o=>o.value>0)
+    opts:[...document.querySelectorAll('.client-opt-row')].map(r=>{return{label:r.querySelector('.opt-label').value||'Opção',value:parseFloat(r.querySelector('.opt-value').value)||0};}).filter(o=>o.value>0),
+    inclusos:[...document.querySelectorAll('.inc-tag.selected')].map(t=>t.textContent.trim()),
+    fotos:photoDataURLs.slice()
   };
 }
 
@@ -849,6 +858,102 @@ const sbUpdate=async(t,id,d)=>{const r=await fetch(SB_API(t)+'?id=eq.'+id,{metho
 let _currentOrcId = 'ORC-' + Date.now();
 function resetOrcId(){ _currentOrcId = 'ORC-' + Date.now(); }
 
+// ══════════════════════════════
+// EDITAR ORÇAMENTO
+// ══════════════════════════════
+function editarOrcamento(id){
+  const r=getRecord(id);if(!r)return;
+
+  // Guarda o original para poder restaurar se cancelar
+  _orcamentoEmEdicao=JSON.parse(JSON.stringify(r));
+
+  // Reutiliza o mesmo orc_id para que o save atualize em vez de criar novo
+  _currentOrcId=id;
+
+  // Navega para a aba orçamento SEM resetar o ID
+  document.querySelectorAll('.topnav-tab').forEach((t,i)=>t.classList.toggle('active',['orcamento','crm','relatorio'][i]==='orcamento'));
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-orcamento').classList.add('active');
+
+  // Preenche dados do cliente
+  document.getElementById('f-nome').value=r.nome||'';
+  document.getElementById('f-tel').value=r.tel||'';
+  document.getElementById('f-email').value=r.email||'';
+  // Converter data de DD/MM/AAAA para AAAA-MM-DD
+  if(r.data){
+    const parts=r.data.split('/');
+    if(parts.length===3)document.getElementById('f-data').value=`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+    else document.getElementById('f-data').value=r.data;
+  }
+
+  // Preenche ficha técnica
+  document.getElementById('f-tipo').value=r.tipo||'';
+  document.getElementById('f-metal').value=r.metal||'';
+  document.getElementById('f-tam').value=r.tam||'';
+  document.getElementById('f-acab').value=r.acab||'';
+  document.getElementById('f-pedras').value=r.pedras||'';
+  document.getElementById('f-dim').value=r.dim||'';
+  document.getElementById('f-pers').value=r.pers||'';
+  document.getElementById('f-desc').value=r.desc||'';
+
+  // Preenche condições
+  document.getElementById('f-prazo').value=r.prazo||'25';
+  document.getElementById('f-valid').value=r.valid||'5';
+  if(r.pgto){
+    // Reverter pgto de HTML para texto simples
+    const pgtoTexto=(r.pgto||'').replace(/<br\s*\/?>/gi,'
+').replace(/^•\s*/gm,'').replace(/<[^>]+>/g,'').trim();
+    document.getElementById('f-pgto').value=pgtoTexto;
+  }
+
+  // Preenche opções de valor (opts)
+  const cont=document.getElementById('clientOpts');
+  cont.innerHTML='';
+  (r.opts||[]).forEach(o=>addClientOpt(o.label,o.value));
+
+  // Itens inclusos — marcar os que estão salvos
+  if(r.inclusos&&r.inclusos.length){
+    document.querySelectorAll('.inc-tag').forEach(tag=>{
+      tag.classList.toggle('selected',r.inclusos.includes(tag.textContent.trim()));
+    });
+  }
+
+  // Fotos — se houver salvas, recarregar
+  photoDataURLs=r.fotos||[];
+  const prev=document.getElementById('previewImgs');
+  prev.innerHTML='';
+  photoDataURLs.forEach((src,idx)=>{
+    const wrap=document.createElement('div');wrap.className='preview-img-wrap';
+    wrap.innerHTML=`<img class="prev-img" src="${src}"><button class="del-img" onclick="photoDataURLs.splice(${idx},1);this.closest('.preview-img-wrap').remove()">×</button>`;
+    prev.appendChild(wrap);
+  });
+
+  // Fecha modal do CRM e vai para aba ficha
+  document.getElementById('modalOverlay').style.display='none';
+  goOrcTab('ficha');
+
+  // Mostrar banner de modo edição
+  document.getElementById('edit-mode-banner').style.display='flex';
+  showToast('✎ Orçamento carregado para edição');
+}
+
+let _orcamentoEmEdicao=null; // guarda o record original ao entrar em modo edição
+
+function cancelarEdicao(){
+  document.getElementById('edit-mode-banner').style.display='none';
+  if(_orcamentoEmEdicao){
+    // Restaura o orçamento original — como estava antes de editar
+    editarOrcamento(_orcamentoEmEdicao.id);
+    document.getElementById('edit-mode-banner').style.display='flex';
+    showToast('Edição cancelada — orçamento original restaurado');
+  } else {
+    resetOrcId();
+    showToast('Edição cancelada');
+  }
+  _orcamentoEmEdicao=null;
+}
+
+
 function saveToCRM(d){
   try{
     const records=JSON.parse(localStorage.getItem('racko_crm')||'[]');
@@ -865,6 +970,8 @@ function saveToCRM(d){
       tipo:d.fTipo,metal:d.fMetal,tam:d.fTam,acab:d.fAcab,pedras:d.fPedras,dim:d.fDim,
       pers:d.fPers,desc:d.fDesc,prazo:d.fPrazo,valid:d.fValid,
       opts,totalVal,pgto:d.pgtoLines||'',
+      inclusos:d.inclusos||[],
+      fotos:d.fotos||[],
       status:existingIdx>=0?records[existingIdx].status:'enviado',
       followUp:existingIdx>=0?records[existingIdx].followUp:'',
       notas:existingIdx>=0?records[existingIdx].notas:'',
@@ -1232,7 +1339,9 @@ function renderLista(){
   empty.style.display='none';
   tbody.innerHTML=records.map(r=>{
     const fu=r.followUp&&isFollowUpToday(r)?`<div class="td-alert">⚑ ${fmtDate(r.followUp)}</div>`:(r.followUp?`<div style="font-size:11px;color:var(--muted)">${fmtDate(r.followUp)}</div>`:'<span style="color:var(--muted)">—</span>');
-    return`<tr onclick="openModal('${r.id}')"><td><div class="td-name">${r.nome||'—'}</div><div class="td-ref">${r.id}</div></td><td>${r.tipo||'—'}</td><td style="font-size:11px">${r.metal||'—'}</td><td><div class="td-val">${fmt(r.totalVal)}</div></td><td><span class="status-pill ${statusClass(r.status)}">${statusLabel(r.status)}</span></td><td style="font-size:11px;color:var(--muted)">${r.data||'—'}</td><td>${fu}</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openModal('${r.id}')" style="margin-right:4px">ver</button><button class="btn btn-whatsapp btn-sm" onclick="event.stopPropagation();openWAModal('${r.id}')">WA</button></td></tr>`;
+    const canEdit=!['producao','entregue'].includes(r.status);
+    const editBtn=canEdit?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();editarOrcamento('${r.id}')" style="margin-right:4px;border-color:rgba(201,168,76,.4);color:var(--gold)">editar</button>`:'';
+    return`<tr onclick="openModal('${r.id}')"><td><div class="td-name">${r.nome||'—'}</div><div class="td-ref">${r.id}</div></td><td>${r.tipo||'—'}</td><td style="font-size:11px">${r.metal||'—'}</td><td><div class="td-val">${fmt(r.totalVal)}</div></td><td><span class="status-pill ${statusClass(r.status)}">${statusLabel(r.status)}</span></td><td style="font-size:11px;color:var(--muted)">${r.data||'—'}</td><td>${fu}</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openModal('${r.id}')" style="margin-right:4px">ver</button>${editBtn}<button class="btn btn-whatsapp btn-sm" onclick="event.stopPropagation();openWAModal('${r.id}')">WA</button></td></tr>`;
   }).join('');
 }
 function limparFiltros(){document.getElementById('search').value='';document.getElementById('filterStatus').value='';document.getElementById('filterMetal').value='';document.getElementById('filterDataDe').value='';document.getElementById('filterDataAte').value='';renderLista();}
@@ -1372,14 +1481,15 @@ function openModal(id){
       <textarea id="contato-texto" rows="2" placeholder="descreva o contato..." style="flex:1;background:#1e1a14;border:1px solid rgba(201,168,76,.4);color:var(--cream);font-family:'Rajdhani',sans-serif;font-size:13px;padding:8px 10px;outline:none;resize:vertical"></textarea>
       <button class="btn btn-gold" style="align-self:flex-end;white-space:nowrap" onclick="addContato('${r.id}')">+ registrar</button>
     </div>
-    <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
-      <button class="btn btn-whatsapp" style="flex:2" onclick="openWAModal('${r.id}')">↗ WhatsApp</button>
-      ${r.status==='fechado'&&!r.pedidoFinanceiro?`<button class="btn btn-gold" style="flex:2" onclick="efetivarVenda('${r.id}')">✓ efetivar venda → financeiro</button>`:''}
-      ${r.pedidoFinanceiro?`<div style="display:flex;gap:8px;flex:2;align-items:center">
+    <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line);flex-wrap:wrap">
+      <button class="btn btn-whatsapp" style="flex:2;min-width:120px" onclick="openWAModal('${r.id}')">↗ WhatsApp</button>
+      ${!['producao','entregue'].includes(r.status)?`<button class="btn btn-ghost" style="flex:2;min-width:120px;border-color:rgba(201,168,76,.4);color:var(--gold)" onclick="editarOrcamento('${r.id}')">✎ editar orçamento</button>`:''}
+      ${r.status==='fechado'&&!r.pedidoFinanceiro?`<button class="btn btn-gold" style="flex:2;min-width:120px" onclick="efetivarVenda('${r.id}')">✓ efetivar venda → financeiro</button>`:''}
+      ${r.pedidoFinanceiro?`<div style="display:flex;gap:8px;flex:2;align-items:center;min-width:120px">
         <div style="background:rgba(90,173,106,0.1);border:1px solid rgba(90,173,106,0.3);padding:8px 14px;border-radius:4px;font-size:12px;color:#6ad88a;flex:1">✓ Pedido <strong>#${r.pedidoFinanceiro}</strong> criado</div>
         <button class="btn btn-danger" style="font-size:10px;padding:6px 10px;white-space:nowrap" onclick="desvincularpedido('${r.id}')" title="Use se excluiu o pedido no financeiro e precisa recriar">↩ desvincular</button>
       </div>`:''}
-      <button class="btn btn-danger" style="flex:1" onclick="excluirRegistro('${r.id}')">excluir</button>
+      <button class="btn btn-danger" style="flex:1;min-width:80px" onclick="excluirRegistro('${r.id}')">excluir</button>
     </div>`;
   document.getElementById('modalOverlay').style.display='flex';
 }
