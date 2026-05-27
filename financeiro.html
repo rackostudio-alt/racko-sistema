@@ -1173,19 +1173,52 @@ async function quickLancar(tipo){
 async function confirmarBaixa(parcelaId,lancId,dir){
   const dataBaixa=document.getElementById('baixaData-'+parcelaId)?.value;
   const contaBaixa=document.getElementById('baixaConta-'+parcelaId)?.value;
+  const valorPago=parseFloat(document.getElementById('baixaValor-'+parcelaId)?.value)||0;
   if(!dataBaixa){showToast('⚠ informe a data da baixa');return}
   if(!contaBaixa){showToast('⚠ informe a conta');return}
+  if(!valorPago){showToast('⚠ informe o valor');return}
 
   const parc=parcelas.find(p=>p.id===parcelaId);if(!parc)return;
   const lanc=lancamentos.find(l=>l.id===lancId);if(!lanc)return;
+  const valorOriginal=Number(parc.valor);
+  const diferenca=Math.round((valorPago-valorOriginal)*100)/100;
   setSyncing();
   try{
-    await sbUpdate('parcelas',parcelaId,{pago:true,data_baixa:dataBaixa,conta_baixa:contaBaixa});
-    parc.pago=true;parc.data_baixa=dataBaixa;parc.conta_baixa=contaBaixa;
+    await sbUpdate('parcelas',parcelaId,{pago:true,data_baixa:dataBaixa,conta_baixa:contaBaixa,valor:valorPago});
+    parc.pago=true;parc.data_baixa=dataBaixa;parc.conta_baixa=contaBaixa;parc.valor=valorPago;
 
     if(!lanc.tem_baixa){
       await sbUpdate('lancamentos',lancId,{confirmado:true,tem_baixa:true});
       lanc.confirmado=true;lanc.tem_baixa=true;
+    }
+
+    // Redistribuir diferença nas parcelas restantes
+    if(Math.abs(diferenca)>=0.01){
+      const proximas=parcelas.filter(p=>p.lancamento_id===lancId&&!p.pago&&p.id!==parcelaId).sort((a,b)=>new Date(a.data_vencimento)-new Date(b.data_vencimento));
+      if(proximas.length>0){
+        const prox=proximas[0];
+        const novoValor=Math.round((Number(prox.valor)-diferenca)*100)/100;
+        if(novoValor>0){
+          await sbUpdate('parcelas',prox.id,{valor:novoValor});
+          prox.valor=novoValor;
+          if(diferenca>0)showToast('✓ Baixa ok! R$ '+diferenca.toFixed(2)+' abatidos da proxima parcela.');
+          else showToast('✓ Baixa ok! R$ '+Math.abs(diferenca).toFixed(2)+' acrescidos a proxima parcela.');
+        }else{showToast('✓ Baixa ok! Verifique as parcelas restantes.');}
+      }else{
+        if(diferenca<0){
+          const saldo=Math.abs(diferenca);
+          const proxD=new Date(parc.data_vencimento+'T12:00:00');
+          proxD.setMonth(proxD.getMonth()+1);
+          const novaData=proxD.toISOString().split('T')[0];
+          const [np]=await sbInsert('parcelas',[{lancamento_id:lancId,label:'Saldo restante',valor:saldo,data_vencimento:novaData,conta:contaBaixa,pago:false,tipo:parc.tipo,conta_baixa:null,data_baixa:null}]);
+          parcelas=[...parcelas,np];
+          showToast('✓ Baixa ok! Parcela extra de R$ '+saldo.toFixed(2)+' criada.');
+        }else{
+          showToast('✓ Baixa ok! Pedido quitado com R$ '+diferenca.toFixed(2)+' a mais.');
+        }
+      }
+    }else{
+      showToast('✓ Baixa realizada! Data: '+fmtData(dataBaixa));
     }
 
     // Recorrente: criar próxima parcela
@@ -1199,14 +1232,13 @@ async function confirmarBaixa(parcelaId,lancId,dir){
         const novaData=new Date(ano,mes,Math.min(dia,new Date(ano,mes+1,0).getDate())).toISOString().split('T')[0];
         const jaExiste=parcelas.find(p=>p.lancamento_id===lancId&&p.data_vencimento===novaData&&!p.pago);
         if(!jaExiste){
-          const [np]=await sbInsert('parcelas',[{lancamento_id:lancId,label:new Date(novaData+'T12:00:00').toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}),valor:parc.valor,data_vencimento:novaData,conta:parc.conta||contaBaixa,pago:false,tipo:parc.tipo,conta_baixa:null,data_baixa:null}]);
+          const [np]=await sbInsert('parcelas',[{lancamento_id:lancId,label:new Date(novaData+'T12:00:00').toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}),valor:valorOriginal,data_vencimento:novaData,conta:parc.conta||contaBaixa,pago:false,tipo:parc.tipo,conta_baixa:null,data_baixa:null}]);
           parcelas=[...parcelas,np];
         }
       }
     }
 
-    setSynced();showToast('✓ baixa realizada!\nData: '+fmtData(dataBaixa));
-    renderPendentes();renderDashboard();renderContas();atualizarBadgePendentes();
+    setSynced();renderPendentes();renderDashboard();renderContas();atualizarBadgePendentes();
   }catch(e){setSyncError();showToast('✗ erro: '+e.message)}
 }
 
@@ -1606,6 +1638,10 @@ function pendHTML(p,hoje,dir){
           <label>conta</label>
           <select id="baixaConta-${p.id}">${contaOpts}</select>
         </div>
+      </div>
+      <div style="margin-top:4px">
+        <label style="display:block;font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">valor ${dir==='receber'?'recebido':'pago'} (R$) <span style="color:var(--text3);font-size:9px;text-transform:none">— altere se diferente</span></label>
+        <input type="number" id="baixaValor-${p.id}" value="${p.valor}" step="0.01" min="0" inputmode="decimal" style="background:var(--surface2);border:1px solid rgba(255,255,255,0.07);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;padding:8px 12px;border-radius:var(--radius-sm);outline:none;width:100%;box-sizing:border-box">
       </div>
       <button class="btn-confirmar-baixa ${dir}" onclick="confirmarBaixa(${p.id},${p.lancamento_id},'${dir}')">
         ${dir==='receber'?'✓ confirmar recebimento':'✓ confirmar pagamento'}
