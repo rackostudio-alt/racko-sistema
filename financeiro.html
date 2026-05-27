@@ -1276,7 +1276,22 @@ async function salvarEdicao(){
     await sbUpdate('lancamentos',id,{tipo:editTipoAtual,descricao,valor,data,cat,obs,is_pessoal:isPessoal,mes,cliente:cliente||null,pedido_id});
     const idx=lancamentos.findIndex(l=>l.id===id);
     if(idx>=0)lancamentos[idx]={...lancamentos[idx],tipo:editTipoAtual,descricao,valor,data,cat,obs,is_pessoal:isPessoal,mes,cliente:cliente||null,pedido_id};
-    setSynced();showToast('✓ atualizado');fecharModalBtn();renderDashboard();renderHistorico();
+    // Atualizar parcelas vinculadas que ainda não foram pagas
+    const parcsVinculadas=parcelas.filter(p=>p.lancamento_id===id&&!p.pago);
+    if(parcsVinculadas.length===1){
+      // Uma única parcela — atualiza valor direto
+      await sbUpdate('parcelas',parcsVinculadas[0].id,{valor,data_vencimento:data,tipo:editTipoAtual});
+      const pidx=parcelas.findIndex(p=>p.id===parcsVinculadas[0].id);
+      if(pidx>=0)parcelas[pidx]={...parcelas[pidx],valor,data_vencimento:data,tipo:editTipoAtual};
+    } else if(parcsVinculadas.length>1){
+      // Múltiplas parcelas — só atualiza o tipo, não redistribui valor automaticamente
+      for(const p of parcsVinculadas){
+        await sbUpdate('parcelas',p.id,{tipo:editTipoAtual});
+        const pidx=parcelas.findIndex(x=>x.id===p.id);
+        if(pidx>=0)parcelas[pidx]={...parcelas[pidx],tipo:editTipoAtual};
+      }
+    }
+    setSynced();showToast('✓ atualizado');fecharModalBtn();renderDashboard();renderHistorico();renderPendentes();
   }catch(e){setSyncError();showToast('✗ erro')}
 }
 function fecharModal(e){if(e.target===document.getElementById('modalOverlay'))fecharModalBtn()}
