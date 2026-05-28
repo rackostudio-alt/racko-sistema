@@ -679,7 +679,7 @@ function goScreen(id){
   document.querySelectorAll('.topnav-tab').forEach((t,i)=>t.classList.toggle('active',['orcamento','crm','relatorio'][i]===id));
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
-  if(id==='orcamento')resetOrcId(); // novo orçamento = novo ID de sessão
+  if(id==='orcamento'&&!_orcamentoEmEdicao)resetOrcId(); // novo orçamento = novo ID de sessão
   if(id!=='orcamento'){const b=document.getElementById('edit-mode-banner');if(b)b.style.display='none';}
   if(id==='crm'){renderMetrics();renderLista();}
   if(id==='relatorio')renderRelatorio();
