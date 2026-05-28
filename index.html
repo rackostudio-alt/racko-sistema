@@ -849,6 +849,7 @@ const SB_H={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'B
 const sbGet=async(t,q='')=>{const r=await fetch(SB_API(t)+(q?'?'+q:''),{headers:{...SB_H,'Prefer':''}});if(!r.ok)throw new Error(await r.text());return r.json()};
 const sbInsert=async(t,d)=>{const r=await fetch(SB_API(t),{method:'POST',headers:SB_H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json()};
 const sbUpdate=async(t,id,d)=>{const r=await fetch(SB_API(t)+'?id=eq.'+id,{method:'PATCH',headers:SB_H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json()};
+const sbDelete=async(t,id)=>{const r=await fetch(SB_API(t)+'?id=eq.'+id,{method:'DELETE',headers:SB_H});if(!r.ok)throw new Error(await r.text());return true};
 
 // ══════════════════════════════
 // CRM SAVE
@@ -1287,10 +1288,25 @@ async function excluirRegistroSB(id){
   if(!confirm('Excluir este registro permanentemente?'))return;
   const r=getRecord(id);if(!r)return;
   try{
-    await sbDelete('crm_orcamentos',r._sbid);
+    // Tentar excluir pelo _sbid (id interno do Supabase) ou pelo orc_id
+    if(r._sbid){
+      await sbDelete('crm_orcamentos',r._sbid);
+    } else {
+      // Buscar pelo orc_id no Supabase e deletar
+      const rows=await sbGet('crm_orcamentos',`orc_id=eq.${id}`);
+      if(rows&&rows.length>0){
+        await sbDelete('crm_orcamentos',rows[0].id);
+      }
+    }
     crmRecords=crmRecords.filter(x=>x.id!==id);
-    closeModalDirect();showToast('Registro excluído');
-  }catch(e){showToast('✗ erro ao excluir');}
+    localStorage.setItem('racko_crm',JSON.stringify(crmRecords));
+    closeModalDirect();
+    showToast('Registro excluído');
+    renderLista();renderMetrics();
+  }catch(e){
+    console.error('Erro ao excluir:',e);
+    showToast('✗ erro ao excluir: '+e.message);
+  }
 }
 
 // ══════════════════════════════
