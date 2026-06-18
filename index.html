@@ -317,13 +317,100 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
 
   <!-- SUB TABS -->
   <div class="crm-tabs" style="margin-top:24px">
-    <button class="crm-tab active" onclick="goOrcTab('calc')">Calculadora</button>
+    <button class="crm-tab active" onclick="goOrcTab('rapido')">⚡ Cálculo Rápido</button>
+    <button class="crm-tab" onclick="goOrcTab('calc')">Calculadora</button>
     <button class="crm-tab" onclick="goOrcTab('ficha')">Ficha do cliente</button>
     <button class="crm-tab" onclick="goOrcTab('gerar')">Gerar PDF</button>
   </div>
 
   <!-- CALC -->
-  <div class="crm-panel active" id="orc-calc">
+  <!-- CÁLCULO RÁPIDO -->
+  <div class="crm-panel active" id="orc-rapido">
+    <div class="info-box"><strong>Cálculo rápido — confidencial.</strong> Calcule o valor da peça em segundos e envie direto para a lista de opções do cliente.</div>
+
+    <div class="section">
+      <div class="section-label">1. Peso do metal</div>
+      <div class="g2" style="margin-bottom:10px">
+        <div class="field"><label>Metal</label>
+          <select id="rp-metal" onchange="rpAtualizarDensidade()">
+            <option value="prata">Prata 950</option>
+            <option value="ouro">Ouro 18k</option>
+          </select>
+        </div>
+        <div class="field"><label>Modo</label>
+          <select id="rp-modo" onchange="rpToggleModo()">
+            <option value="direto">Já sei o peso (g)</option>
+            <option value="specs">Calcular por especificações</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- MODO PESO DIRETO -->
+      <div id="rp-modo-direto">
+        <div class="field"><label>Peso (g)</label><input type="number" id="rp-peso-direto" placeholder="0,00" min="0" step="0.01" oninput="rpCalcular()"></div>
+      </div>
+
+      <!-- MODO POR ESPECIFICAÇÕES -->
+      <div id="rp-modo-specs" style="display:none">
+        <div class="g3" style="margin-bottom:10px">
+          <div class="field"><label>Aro</label><input type="number" id="rp-aro" placeholder="ex: 18" min="6" max="34" step="0.5" oninput="rpCalcular()"></div>
+          <div class="field"><label>Largura (mm)</label><input type="number" id="rp-largura" placeholder="ex: 5" min="0" step="0.1" oninput="rpCalcular()"></div>
+          <div class="field"><label>Espessura (mm)</label><input type="number" id="rp-espessura" placeholder="ex: 1,3" min="0" step="0.1" oninput="rpCalcular()"></div>
+        </div>
+        <div class="g2">
+          <div class="field"><label>Perfil</label>
+            <select id="rp-perfil" onchange="rpCalcular()">
+              <option value="0.86">Reto / chato</option>
+              <option value="0.85">Semi-abaulado</option>
+              <option value="0.74" selected>Abaulado / anatômico</option>
+            </select>
+          </div>
+          <div class="field"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rp-rebaixo" onchange="rpCalcular()" style="width:auto"> peça larga com rebaixo interno</label></div>
+        </div>
+        <div style="text-align:right;margin-top:6px;font-size:11px;color:var(--muted)">Peso estimado: <span id="rp-peso-calculado" style="color:var(--gold-light);font-family:'Cormorant Garamond',serif;font-size:1.1rem">— g</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">2. Valor da grama</div>
+      <div class="field"><label>R$ por grama (<span id="rp-metal-label">prata</span>)</label><input type="number" id="rp-valor-grama" placeholder="ex: 12,00" min="0" step="0.01" oninput="rpCalcular()"></div>
+      <div style="text-align:right;margin-top:6px"><span style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)">Valor do metal: </span><span id="rp-valor-metal" style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;color:var(--gold-light)">R$ 0,00</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">3. Acréscimos (pedras, corte a laser, mão de obra extra...)</div>
+      <div id="rp-acrescimos"></div>
+      <script>setTimeout(()=>{if(document.getElementById('rp-acrescimos')&&document.getElementById('rp-acrescimos').children.length===0)rpAddAcrescimo();},100);</script>
+      <button class="add-btn" onclick="rpAddAcrescimo()">+ adicionar acréscimo</button>
+    </div>
+
+    <div class="section">
+      <div class="section-label">4. Margem (opcional)</div>
+      <div class="g2">
+        <div class="field"><label>Tipo</label>
+          <select id="rp-margem-tipo" onchange="rpCalcular()">
+            <option value="nenhuma">Sem margem extra</option>
+            <option value="percent">Percentual (%)</option>
+            <option value="fixo">Valor fixo (R$)</option>
+          </select>
+        </div>
+        <div class="field"><label>Valor</label><input type="number" id="rp-margem-valor" placeholder="0" min="0" step="0.01" oninput="rpCalcular()"></div>
+      </div>
+    </div>
+
+    <div class="section" style="background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.25);padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">Total da peça</span>
+        <span id="rp-total" style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:var(--gold-light)">R$ 0,00</span>
+      </div>
+    </div>
+
+    <div class="field"><label>Nome desta opção (vai aparecer pro cliente)</label><input type="text" id="rp-nome-opcao" placeholder="ex: Versão Prata 950" value="Peça personalizada"></div>
+
+    <button class="btn-outline" style="margin-top:0;width:100%" onclick="rpUsarValor()">✓ usar este valor → enviar para Ficha do Cliente</button>
+  </div>
+
+  <div class="crm-panel" id="orc-calc">
     <div class="info-box"><strong>Calculadora interna — confidencial.</strong> Os custos detalhados nunca aparecem no orçamento do cliente.</div>
 
     <div class="section">
@@ -684,8 +771,100 @@ function goScreen(id){
   if(id==='crm'){renderMetrics();renderLista();}
   if(id==='relatorio')renderRelatorio();
 }
+// ══════════════════════════════
+// CÁLCULO RÁPIDO
+// ══════════════════════════════
+const RP_DENSIDADE={prata:10.5,ouro:15.54};
+let rpAcrescimosRows=[];
+
+function rpToggleModo(){
+  const modo=document.getElementById('rp-modo').value;
+  document.getElementById('rp-modo-direto').style.display=modo==='direto'?'block':'none';
+  document.getElementById('rp-modo-specs').style.display=modo==='specs'?'block':'none';
+  rpCalcular();
+}
+
+function rpAtualizarDensidade(){
+  const metal=document.getElementById('rp-metal').value;
+  document.getElementById('rp-metal-label').textContent=metal==='ouro'?'ouro 18k':'prata 950';
+  rpCalcular();
+}
+
+// Tabela de diâmetro interno por aro (mm) — padrão brasileiro
+function rpDiametroAro(aro){
+  return 14.0+(aro-8)*0.427;
+}
+
+function rpCalcularPesoSpecs(){
+  const aro=parseFloat(document.getElementById('rp-aro').value)||0;
+  const largura=parseFloat(document.getElementById('rp-largura').value)||0;
+  const espessura=parseFloat(document.getElementById('rp-espessura').value)||0;
+  const rebaixo=document.getElementById('rp-rebaixo').checked;
+  let fator=parseFloat(document.getElementById('rp-perfil').value)||0.74;
+  if(rebaixo)fator=0.74; // peça larga com rebaixo usa fator do abaulado
+  if(!aro||!largura||!espessura)return 0;
+  const dInterno=rpDiametroAro(aro);
+  const dMedio=dInterno+espessura;
+  const volTeorico=Math.PI*dMedio*largura*espessura; // mm³
+  const volAjustado=volTeorico*fator;
+  const metal=document.getElementById('rp-metal').value;
+  const densidade=RP_DENSIDADE[metal];
+  const pesoG=(volAjustado/1000)*densidade; // mm³→cm³ ÷1000
+  return pesoG;
+}
+
+function rpAddAcrescimo(desc='',valor=''){
+  const id='rpac-'+Date.now()+Math.floor(Math.random()*1000);
+  rpAcrescimosRows.push(id);
+  const cont=document.getElementById('rp-acrescimos');
+  const row=document.createElement('div');
+  row.className='client-opt-row';
+  row.id=id;
+  row.innerHTML=`<div class="field"><label>Descrição</label><input type="text" class="rp-ac-desc" value="${desc}" placeholder="ex: Pedra ametista oval 8x10mm" oninput="rpCalcular()"></div><div class="field"><label>Valor (R$)</label><input type="number" class="rp-ac-valor" value="${valor}" placeholder="0,00" min="0" step="0.01" oninput="rpCalcular()"></div><button class="rm-btn" onclick="document.getElementById('${id}').remove();rpAcrescimosRows=rpAcrescimosRows.filter(x=>x!=='${id}');rpCalcular()">×</button>`;
+  cont.appendChild(row);
+}
+
+function rpCalcular(){
+  const modo=document.getElementById('rp-modo').value;
+  let peso=0;
+  if(modo==='direto'){
+    peso=parseFloat(document.getElementById('rp-peso-direto').value)||0;
+  }else{
+    peso=rpCalcularPesoSpecs();
+    document.getElementById('rp-peso-calculado').textContent=peso>0?peso.toFixed(2)+' g':'— g';
+  }
+
+  const valorGrama=parseFloat(document.getElementById('rp-valor-grama').value)||0;
+  const valorMetal=peso*valorGrama;
+  document.getElementById('rp-valor-metal').textContent=fmt(valorMetal);
+
+  // Somar acréscimos
+  const acrescimos=[...document.querySelectorAll('.rp-ac-valor')].reduce((s,el)=>s+(parseFloat(el.value)||0),0);
+
+  let subtotal=valorMetal+acrescimos;
+
+  // Margem
+  const margemTipo=document.getElementById('rp-margem-tipo').value;
+  const margemValor=parseFloat(document.getElementById('rp-margem-valor').value)||0;
+  let total=subtotal;
+  if(margemTipo==='percent')total=subtotal*(1+margemValor/100);
+  else if(margemTipo==='fixo')total=subtotal+margemValor;
+
+  document.getElementById('rp-total').textContent=fmt(total);
+  return total;
+}
+
+function rpUsarValor(){
+  const total=rpCalcular();
+  if(total<=0){showToast('⚠ Informe o peso e o valor da grama antes');return}
+  const nome=document.getElementById('rp-nome-opcao').value||'Peça personalizada';
+  addClientOpt(nome,total.toFixed(2));
+  showToast('✓ Valor enviado para a Ficha do Cliente!');
+  goOrcTab('ficha');
+}
+
 function goOrcTab(id){
-  document.querySelectorAll('#screen-orcamento .crm-tab').forEach((t,i)=>t.classList.toggle('active',['calc','ficha','gerar'][i]===id));
+  document.querySelectorAll('#screen-orcamento .crm-tab').forEach((t,i)=>t.classList.toggle('active',['rapido','calc','ficha','gerar'][i]===id));
   document.querySelectorAll('#screen-orcamento .crm-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('orc-'+id).classList.add('active');
   if(id==='gerar')buildResumo();
