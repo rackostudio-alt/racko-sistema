@@ -73,6 +73,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:#d8c8a0;font-weight:500}
 .field input,.field select,.field textarea{background:#231f17;border:1px solid rgba(212,168,58,.55);color:#f0e4cc;font-family:'Rajdhani',sans-serif;font-size:14px;padding:9px 12px;outline:none;transition:border-color .2s,background .2s;resize:vertical;appearance:none;width:100%}
+.field input[type="checkbox"]{appearance:auto;-webkit-appearance:auto;width:18px;height:18px;accent-color:var(--gold-light,#d4a83a);cursor:pointer;flex-shrink:0;padding:0;background:none}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:#e8c060;background:#2a2210}
 .field input::placeholder,.field textarea::placeholder{color:rgba(240,228,200,.5);font-size:12px}
 .field select option{background:#1e1a14;color:var(--cream)}
@@ -351,6 +352,7 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
         <div class="field"><label>Quantas peças?</label></div>
         <div id="rp-pesos-lista"></div>
         <button class="add-btn" onclick="rpAddPesoDireto()">+ adicionar peça</button>
+        <div style="text-align:right;margin-top:10px;font-size:11px;color:var(--muted)">Peso total: <span id="rp-peso-total-direto" style="color:var(--gold-light);font-family:'Cormorant Garamond',serif;font-size:1.1rem">— g</span></div>
       </div>
 
       <!-- MODO POR ESPECIFICAÇÕES -->
@@ -831,7 +833,16 @@ function rpPesoUmAro(aro){
 }
 
 function rpCalcularPesoSpecs(){
-  return [...document.querySelectorAll('.rp-aro-input')].reduce((s,el)=>s+rpPesoUmAro(parseFloat(el.value)||0),0);
+  let total=0;
+  document.querySelectorAll('#rp-aros-lista .rp-ac-row').forEach(row=>{
+    const input=row.querySelector('.rp-aro-input');
+    const display=row.querySelector('.rp-peso-individual');
+    const aro=parseFloat(input?.value)||0;
+    const pesoPeca=rpPesoUmAro(aro);
+    if(display)display.textContent=pesoPeca>0?pesoPeca.toFixed(2)+' g':'— g';
+    total+=pesoPeca;
+  });
+  return total;
 }
 
 function rpAddAro(valor=''){
@@ -842,7 +853,7 @@ function rpAddAro(valor=''){
   const row=document.createElement('div');
   row.className='rp-ac-row';
   row.id=id;
-  row.innerHTML=`<div class="field"><label>Aro — peça ${n}</label><input type="number" class="rp-aro-input" value="${valor}" placeholder="ex: 18" min="6" max="34" step="0.5" oninput="rpCalcular()"></div><div></div><button class="rm-btn" onclick="document.getElementById('${id}').remove();rpAroRows=rpAroRows.filter(x=>x!=='${id}');rpRenumerarAros();rpCalcular()">×</button>`;
+  row.innerHTML=`<div class="field"><label>Aro — peça ${n}</label><input type="number" class="rp-aro-input" value="${valor}" placeholder="ex: 18" min="6" max="34" step="0.5" oninput="rpCalcular()"></div><div class="field"><label>Peso desta peça</label><div class="rp-peso-individual" style="padding:9px 12px;font-size:13px;color:var(--gold-light,#d4a83a);font-family:'Cormorant Garamond',serif">— g</div></div><button class="rm-btn" onclick="document.getElementById('${id}').remove();rpAroRows=rpAroRows.filter(x=>x!=='${id}');rpRenumerarAros();rpCalcular()">×</button>`;
   cont.appendChild(row);
   rpCalcular();
 }
@@ -888,6 +899,8 @@ function rpCalcular(){
   let peso=0;
   if(modo==='direto'){
     peso=[...document.querySelectorAll('.rp-peso-input')].reduce((s,el)=>s+(parseFloat(el.value)||0),0);
+    const elTotal=document.getElementById('rp-peso-total-direto');
+    if(elTotal)elTotal.textContent=peso>0?peso.toFixed(2)+' g':'— g';
   }else{
     peso=rpCalcularPesoSpecs();
     document.getElementById('rp-peso-calculado').textContent=peso>0?peso.toFixed(2)+' g':'— g';
