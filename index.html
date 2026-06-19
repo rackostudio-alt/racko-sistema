@@ -564,6 +564,13 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
       <p class="note" style="margin-bottom:12px">Edite, adicione ou remova as opções de valor que aparecerão no orçamento do cliente.</p>
       <div class="client-opts" id="clientOpts"></div>
       <button class="add-btn" onclick="addClientOpt()">+ adicionar opção personalizada</button>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="f-somar-total" onchange="atualizarTotalComDesconto()" style="width:auto"> Mostrar valor total no PDF <span style="color:var(--muted);font-size:11px">(soma todas as opções acima, com desconto opcional)</span></label>
+        <div id="f-desconto-wrap" style="display:none;margin-top:10px" class="g2">
+          <div class="field"><label>Desconto (R$)</label><input type="number" id="f-desconto" value="0" min="0" step="0.01" placeholder="0,00" oninput="atualizarTotalComDesconto()"></div>
+          <div class="field"><label>Total final</label><div id="f-total-calculado" style="padding:9px 12px;font-size:1.1rem;color:var(--gold-light);font-family:'Cormorant Garamond',serif;border:1px solid rgba(212,168,58,.55);background:#231f17">R$ 0,00</div></div>
+        </div>
+      </div>
     </div>
     <div class="section">
       <div class="section-label">Dados do cliente</div>
@@ -998,7 +1005,17 @@ function removeMat(btn){const rows=document.getElementById('matRows');if(rows.ch
 // ══════════════════════════════
 // CLIENT OPTIONS
 // ══════════════════════════════
-function addClientOpt(label='',value=''){const cont=document.getElementById('clientOpts'),d=document.createElement('div');d.className='client-opt-row';d.innerHTML=`<div class="field"><label>Nome da opção</label><input type="text" class="opt-label" value="${label}" placeholder="ex: Versão Ouro 18k"></div><div class="field"><label>Valor final para o cliente (R$)</label><input type="number" class="opt-value" value="${value}" placeholder="0,00" min="0" step="0.01"></div><button class="rm-btn" onclick="this.closest('.client-opt-row').remove()">×</button>`;cont.appendChild(d);}
+function atualizarTotalComDesconto(){
+  const ativo=document.getElementById('f-somar-total').checked;
+  document.getElementById('f-desconto-wrap').style.display=ativo?'grid':'none';
+  if(!ativo)return;
+  const subtotal=[...document.querySelectorAll('.client-opt-row .opt-value')].reduce((s,el)=>s+(parseFloat(el.value)||0),0);
+  const desconto=parseFloat(document.getElementById('f-desconto').value)||0;
+  const total=Math.max(0,subtotal-desconto);
+  document.getElementById('f-total-calculado').textContent=fmt(total);
+}
+
+function addClientOpt(label='',value=''){const cont=document.getElementById('clientOpts'),d=document.createElement('div');d.className='client-opt-row';d.innerHTML=`<div class="field"><label>Nome da opção</label><input type="text" class="opt-label" value="${label}" placeholder="ex: Versão Ouro 18k"></div><div class="field"><label>Valor final para o cliente (R$)</label><input type="number" class="opt-value" value="${value}" placeholder="0,00" min="0" step="0.01" oninput="atualizarTotalComDesconto()"></div><button class="rm-btn" onclick="this.closest('.client-opt-row').remove();atualizarTotalComDesconto()">×</button>`;cont.appendChild(d);atualizarTotalComDesconto();}
 
 // ══════════════════════════════
 // CALCULAR
@@ -1086,7 +1103,9 @@ function getPDFData(){
     includes:[...document.querySelectorAll('.inc-tag.selected')].map(t=>t.textContent.trim()),
     opts:[...document.querySelectorAll('.client-opt-row')].map(r=>{return{label:r.querySelector('.opt-label').value||'Opção',value:parseFloat(r.querySelector('.opt-value').value)||0};}).filter(o=>o.value>0),
     inclusos:[...document.querySelectorAll('.inc-tag.selected')].map(t=>t.textContent.trim()),
-    fotos:photoDataURLs.slice()
+    fotos:photoDataURLs.slice(),
+    mostrarTotal:document.getElementById('f-somar-total')?.checked||false,
+    desconto:parseFloat(document.getElementById('f-desconto')?.value)||0
   };
 }
 
@@ -1439,6 +1458,11 @@ function buildClientBody(d, showPhotos=true) {
   const priceRows = d.opts.map(o=>
     `<tr><td>${o.label}</td><td><div class="amt">${fmt(o.value)}</div></td></tr>`
   ).join('');
+  const subtotalCalc = d.opts.reduce((s,o)=>s+o.value,0);
+  const totalRows = d.mostrarTotal ? (
+    (d.desconto>0?`<tr><td>Desconto</td><td><div class="amt">- ${fmt(d.desconto)}</div></td></tr>`:'') +
+    `<tr style="border-top:2px solid #2a1f14"><td><strong>Total</strong></td><td><div class="amt"><strong>${fmt(Math.max(0,subtotalCalc-d.desconto))}</strong></div></td></tr>`
+  ) : '';
   const photosHTML = showPhotos && photoDataURLs.length
     ? `<div class="st">Referências</div><div class="photos">${photoDataURLs.map(s=>`<img class="photo" src="${s}">`).join('')}</div>` : '';
   const incHTML = d.includes.length
@@ -1480,7 +1504,7 @@ function buildClientBody(d, showPhotos=true) {
         <div class="st">Investimento</div>
         <table>
           <thead><tr><th>Descrição</th><th style="text-align:right">Valor</th></tr></thead>
-          <tbody>${priceRows}</tbody>
+          <tbody>${priceRows}${totalRows}</tbody>
         </table>
       </div>
       <div>
