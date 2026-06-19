@@ -769,7 +769,10 @@ function goScreen(id){
   document.getElementById('screen-'+id).classList.add('active');
   if(id==='orcamento'&&!_orcamentoEmEdicao)resetOrcId(); // novo orçamento = novo ID de sessão
   if(id!=='orcamento'){const b=document.getElementById('edit-mode-banner');if(b)b.style.display='none';}
-  if(id==='crm'){renderMetrics();renderLista();}
+  if(id==='crm'){
+    renderMetrics();renderLista(); // mostra o que já tem em memória imediatamente
+    loadCRMRecords().then(()=>{renderMetrics();renderLista();}); // e atualiza com o que está no Supabase
+  }
   if(id==='relatorio')renderRelatorio();
 }
 // ══════════════════════════════
@@ -1463,6 +1466,7 @@ function gerarPDFCliente(){
   const d=getPDFData();
   saveToCRM(d);
   limparRascunho();
+  loadCRMRecords(); // mantém a lista do CRM atualizada em memória
   mostrarPreview('Orçamento do cliente — pré-visualização',buildClientBody(d));
 }
 
