@@ -539,10 +539,7 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
         <div style="padding:10px 14px;border-right:1px solid var(--line)"><div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Embalagem & entrega</div><div style="font-size:14px" id="r-emb">—</div></div>
         <div style="padding:10px 14px"><div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Fixos & taxa</div><div style="font-size:14px" id="r-fix">—</div></div>
       </div>
-      <div class="section-label">Opções de preço para o cliente</div>
-      <p class="note" style="margin-bottom:12px">Valores calculados automaticamente. Edite livremente antes de gerar o PDF.</p>
-      <div class="client-opts" id="clientOpts"></div>
-      <button class="add-btn" onclick="addClientOpt()">+ adicionar opção personalizada</button>
+      <p class="note" style="margin-bottom:12px">Os valores finais para o cliente agora ficam na aba <strong>Ficha do Cliente</strong> — clique em "próximo" para editá-los.</p>
     </div>
     <div class="sep"></div>
     <button class="btn-outline" onclick="goOrcTab('ficha')" style="margin-top:0">próximo: ficha do cliente →</button>
@@ -550,6 +547,12 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
 
   <!-- FICHA -->
   <div class="crm-panel" id="orc-ficha">
+    <div class="section">
+      <div class="section-label">Valores para o cliente</div>
+      <p class="note" style="margin-bottom:12px">Edite, adicione ou remova as opções de valor que aparecerão no orçamento do cliente.</p>
+      <div class="client-opts" id="clientOpts"></div>
+      <button class="add-btn" onclick="addClientOpt()">+ adicionar opção personalizada</button>
+    </div>
     <div class="section">
       <div class="section-label">Dados do cliente</div>
       <div class="g2">
