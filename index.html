@@ -102,6 +102,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 /* ── CLIENT OPTS ── */
 .client-opts{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
 .client-opt-row{display:grid;grid-template-columns:1fr 1fr 32px;gap:8px;align-items:end;animation:fadeUp .2s ease both}
+.rp-ac-row{display:grid;grid-template-columns:1fr 1fr 32px;gap:8px;align-items:end;animation:fadeUp .2s ease both;margin-bottom:8px}
 
 /* ── INCLUDES ── */
 .includes-grid{display:flex;flex-wrap:wrap;gap:8px}
@@ -818,7 +819,7 @@ function rpAddAcrescimo(desc='',valor=''){
   rpAcrescimosRows.push(id);
   const cont=document.getElementById('rp-acrescimos');
   const row=document.createElement('div');
-  row.className='client-opt-row';
+  row.className='rp-ac-row';
   row.id=id;
   row.innerHTML=`<div class="field"><label>Descrição</label><input type="text" class="rp-ac-desc" value="${desc}" placeholder="ex: Pedra ametista oval 8x10mm" oninput="rpCalcular()"></div><div class="field"><label>Valor (R$)</label><input type="number" class="rp-ac-valor" value="${valor}" placeholder="0,00" min="0" step="0.01" oninput="rpCalcular()"></div><button class="rm-btn" onclick="document.getElementById('${id}').remove();rpAcrescimosRows=rpAcrescimosRows.filter(x=>x!=='${id}');rpCalcular()">×</button>`;
   cont.appendChild(row);
@@ -1035,6 +1036,80 @@ const sbDelete=async(t,id)=>{const r=await fetch(SB_API(t)+'?id=eq.'+id,{method:
 // ══════════════════════════════
 // orc_id gerado UMA VEZ por sessão de orçamento.
 // Resetado apenas ao limpar o formulário explicitamente.
+// ══════════════════════════════
+// RASCUNHO AUTOMÁTICO — evita perder o orçamento em caso de erro/recarregamento
+// ══════════════════════════════
+const RASCUNHO_KEY='racko_rascunho_orcamento';
+const RASCUNHO_CAMPOS=['f-nome','f-tel','f-email','f-data','f-tipo','f-metal','f-tam','f-acab','f-pedras','f-dim','f-pers','f-desc','f-prazo','f-valid','f-pgto'];
+let _rascunhoSalvando=false;
+
+function salvarRascunho(){
+  if(_rascunhoSalvando)return; // evita salvar rascunho enquanto carrega um rascunho/edição
+  try{
+    const dados={};
+    RASCUNHO_CAMPOS.forEach(id=>{const el=document.getElementById(id);if(el)dados[id]=el.value;});
+    dados.opts=[...document.querySelectorAll('.client-opt-row')].map(r=>({label:r.querySelector('.opt-label')?.value||'',value:r.querySelector('.opt-value')?.value||''}));
+    dados.inclusos=[...document.querySelectorAll('.inc-tag.selected')].map(t=>t.textContent.trim());
+    dados.savedAt=new Date().toISOString();
+    // Só salva rascunho se tiver pelo menos o nome do cliente preenchido
+    if(dados['f-nome']&&dados['f-nome'].trim()){
+      localStorage.setItem(RASCUNHO_KEY,JSON.stringify(dados));
+    }
+  }catch(e){console.warn('Erro ao salvar rascunho:',e);}
+}
+
+function temRascunhoSalvo(){
+  try{
+    const raw=localStorage.getItem(RASCUNHO_KEY);
+    if(!raw)return null;
+    const dados=JSON.parse(raw);
+    return dados&&dados['f-nome']?dados:null;
+  }catch(e){return null;}
+}
+
+function restaurarRascunho(dados){
+  _rascunhoSalvando=true;
+  RASCUNHO_CAMPOS.forEach(id=>{const el=document.getElementById(id);if(el&&dados[id]!==undefined)el.value=dados[id];});
+  const cont=document.getElementById('clientOpts');
+  if(cont&&dados.opts){cont.innerHTML='';dados.opts.forEach(o=>addClientOpt(o.label,o.value));}
+  if(dados.inclusos&&dados.inclusos.length){
+    document.querySelectorAll('.inc-tag').forEach(tag=>{tag.classList.toggle('selected',dados.inclusos.includes(tag.textContent.trim()));});
+  }
+  _rascunhoSalvando=false;
+  showToast('✓ Rascunho restaurado!');
+}
+
+function limparRascunho(){
+  localStorage.removeItem(RASCUNHO_KEY);
+}
+
+function mostrarAvisoRascunho(){
+  const dados=temRascunhoSalvo();
+  if(!dados)return;
+  const quando=dados.savedAt?new Date(dados.savedAt).toLocaleString('pt-BR'):'';
+  const banner=document.createElement('div');
+  banner.id='rascunho-banner';
+  banner.style='position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#1e1a14;border:1px solid rgba(201,168,76,.5);padding:14px 20px;border-radius:6px;z-index:9999;display:flex;align-items:center;gap:14px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:90vw;flex-wrap:wrap';
+  banner.innerHTML=`<span style="font-size:12px;color:var(--cream)">📝 Encontramos um orçamento não finalizado de <strong>${dados['f-nome']}</strong>${quando?' ('+quando+')':''}</span>
+    <button onclick="restaurarRascunho(JSON.parse(localStorage.getItem('${RASCUNHO_KEY}')));document.getElementById('rascunho-banner').remove();goOrcTab('ficha')" style="background:var(--gold);color:var(--black);border:none;padding:6px 14px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border-radius:4px">restaurar</button>
+    <button onclick="limparRascunho();document.getElementById('rascunho-banner').remove()" style="background:transparent;color:var(--muted);border:1px solid var(--line);padding:6px 14px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border-radius:4px">descartar</button>`;
+  document.body.appendChild(banner);
+}
+
+// Vincula auto-save aos campos do formulário (debounced)
+let _rascunhoTimer=null;
+function agendarSalvarRascunho(){
+  clearTimeout(_rascunhoTimer);
+  _rascunhoTimer=setTimeout(salvarRascunho,800);
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  RASCUNHO_CAMPOS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('input',agendarSalvarRascunho);
+  });
+  mostrarAvisoRascunho();
+});
+
 let _currentOrcId = 'ORC-' + Date.now();
 function resetOrcId(){ _currentOrcId = 'ORC-' + Date.now(); }
 
@@ -1387,6 +1462,7 @@ function mostrarPreview(label,bodyHTML){
 function gerarPDFCliente(){
   const d=getPDFData();
   saveToCRM(d);
+  limparRascunho();
   mostrarPreview('Orçamento do cliente — pré-visualização',buildClientBody(d));
 }
 
