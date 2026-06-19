@@ -1108,13 +1108,15 @@ function agendarSalvarRascunho(){
   clearTimeout(_rascunhoTimer);
   _rascunhoTimer=setTimeout(salvarRascunho,800);
 }
-document.addEventListener('DOMContentLoaded',()=>{
+function inicializarRascunho(){
   RASCUNHO_CAMPOS.forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.addEventListener('input',agendarSalvarRascunho);
   });
   mostrarAvisoRascunho();
-});
+}
+// Este script roda no fim do <body>, então o DOM já está pronto — não esperar DOMContentLoaded
+inicializarRascunho();
 
 let _currentOrcId = 'ORC-' + Date.now();
 function resetOrcId(){ _currentOrcId = 'ORC-' + Date.now(); }
