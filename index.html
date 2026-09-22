@@ -270,8 +270,40 @@ tr:hover td{background:rgba(201,168,76,.04);cursor:pointer}
   .topnav-tab{padding:12px 12px;font-size:10px}
 }
 </style>
+
+<style>
+/* ══════════════════════════════════════════════════════════════
+   LEGIBILIDADE — letras maiores e mais fortes em toda a tela.
+   Mantém o visual (dourado sobre preto); só aumenta tamanho/peso
+   do texto de uso diário (rótulos, campos, abas, botões, tabelas).
+   Os títulos grandes em itálico (logo, telas) não são afetados.
+   ══════════════════════════════════════════════════════════════ */
+.field label, .login-field label, .section-label, .sec-label, .login-title,
+.metal-tab, .tab-group button, .upload-label, .inc-tag, .status-pill,
+.resumo-label, .metric-sub, .modal-sub, .note, .report-title,
+.pipe-card-date, .contact-entry-date, .td-ref, .bar-label, .login-sub {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: .06em !important;
+}
+.topnav-tab { font-size: 13px !important; font-weight: 600 !important; }
+.crm-tab { font-size: 14px !important; font-weight: 600 !important; }
+.pipe-card-name { font-size: 15px !important; font-weight: 700 !important; }
+.pipe-count, .alert-count, .td-alert { font-size: 13px !important; font-weight: 700 !important; }
+.btn, .add-btn { font-size: 13px !important; font-weight: 700 !important; }
+.btn-sm { font-size: 12px !important; font-weight: 700 !important; }
+.del-img { font-size: 14px !important; }
+.login-error, .login-version, .wa-template-text { font-size: 13px !important; }
+
+.field input, .field select, .field textarea, .login-field input {
+  font-size: 17px !important;
+  font-weight: 500 !important;
+}
+.mat-sub { font-size: 15px !important; }
+</style>
 </head>
 <body>
+
 <div id="print-frame" style="display:none"></div>
 
 <!-- TELA DE LOGIN -->

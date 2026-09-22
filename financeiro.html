@@ -320,8 +320,39 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-
 .filter-search:focus{border-color:rgba(201,168,76,0.4)}
 .filter-count{font-size:10px;color:var(--text3);margin-bottom:8px;text-align:right}
 </style>
+
+<style>
+/* ══════════════════════════════════════════════════════════════
+   LEGIBILIDADE — letras maiores e mais fortes (mesmo tema escuro).
+   ══════════════════════════════════════════════════════════════ */
+.baixa-form label, .config-campo label, .conta-field label, .form-row label,
+.login-field label, .login-title, .section-title, .insight-title,
+.filter-section-title, .quick-title, .parcelas-title, .relatorio-section,
+.dist-item-label, .cliente-stat, .meta-sub, .pendente-label, .pendente-meta,
+.tx-meta, .parcela-label-sm, .parcela-row-label, .header-date, .login-sub,
+.alert-title, .health-badge, .period-select {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: .05em !important;
+}
+.subtab, .nav-btn, .filter-chip, .conta-tipo, .pill { font-size: 13px !important; font-weight: 600 !important; }
+.tx-btn, .btn-add-parcela, .btn-add-to-pedido, .pedido-novo-btn, .pedido-limpar-btn { font-size: 13px !important; font-weight: 700 !important; }
+.tx-cliente, .tx-pedido, .pendente-pedido { font-size: 15px !important; font-weight: 700 !important; }
+.pendente-data, .filter-clear, .sync-indicator, .login-error, .login-version,
+.meta-vals, .pedido-linha, .alert-items, .tx-parcelas-info, .header-logo span {
+  font-size: 13px !important;
+}
+
+.form-row input, .form-row select, .login-field input, .config-campo input,
+.parcela-input, .conta-field input, .filter-bar input, .filter-search,
+.conta-nome-input {
+  font-size: 16px !important;
+  font-weight: 500 !important;
+}
+</style>
 </head>
 <body>
+
 
 <div id="loginScreen">
   <div class="login-logo">rackō</div>
@@ -352,7 +383,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-
       <button onclick="sair()" style="background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--text3);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:all .2s" onmouseover="this.style.borderColor='rgba(217,83,79,0.4)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='var(--text3)'">sair</button>
       <div>
         <div class="header-date" id="headerDate"></div>
-        <div class="sync-indicator"><div class="sync-dot" id="syncDot"></div><span id="syncLabel" style="color:var(--text3)">ok</span></div>
+        <div class="sync-indicator" onclick="recarregarDados()" style="cursor:pointer" title="Atualizar dados sem sair do sistema"><div class="sync-dot" id="syncDot"></div><span id="syncLabel" style="color:var(--text3)">ok</span> <span style="margin-left:2px">🔄</span></div>
       </div>
     </div>
   </div>
@@ -647,7 +678,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-
     <div class="page" id="page-contas">
       <div class="insight-card info"><div class="insight-title">🏦 saldo real das contas</div><div class="insight-text">Saldo = saldo inicial + baixas de entrada − baixas de saída. O saldo só muda quando você dá baixa em uma parcela vinculada a esta conta.</div></div>
       <div class="contas-grid" id="contasGrid"></div>
-      <div style="margin-top:12px"><button class="btn-primary" onclick="salvarContas()">salvar contas</button></div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="salvarContas()" style="flex:1;min-width:160px">salvar contas</button>
+        <button class="btn-ghost" onclick="adicionarConta()" style="flex:1;min-width:160px">+ nova conta</button>
+      </div>
     </div>
 
     <!-- DISTRIBUIÇÃO -->
@@ -870,6 +904,44 @@ const setSyncError=()=>{
   },5000);
 };
 
+async function recarregarDados(silencioso) {
+  if (!silencioso) setSyncing();
+  try {
+    const [lancs, parcs, contas, peds, configs] = await Promise.all([
+      sbGet('lancamentos', 'order=created_at.desc'),
+      sbGet('parcelas', 'order=data_vencimento.asc'),
+      sbGet('contas_config', 'order=id.asc'),
+      sbGet('pedidos', 'order=id.desc'),
+      sbGet('configuracoes', ''),
+    ]);
+    lancamentos = lancs; parcelas = parcs; contasConfig = contas; pedidos = peds;
+    if (configs && configs.length) {
+      configs.forEach(c => {
+        if (c.chave === 'meta_min') document.getElementById('metaMin').value = c.valor || '';
+        if (c.chave === 'meta_ideal') document.getElementById('metaIdeal').value = c.valor || '';
+        if (c.chave === 'meta_invest') document.getElementById('metaInvest').value = c.valor || '';
+      });
+    }
+    setSynced();
+    // Re-renderiza tudo que existir na tela agora, sem precisar saber qual aba está aberta
+    renderCatSelect(); renderContaSelect(); renderDashboard(); renderContas(); renderRelatorio(); renderCategorias();
+    if (typeof renderHistorico === 'function') renderHistorico();
+    if (typeof renderClientes === 'function') renderClientes();
+    if (typeof renderPendentes === 'function') renderPendentes();
+    if (typeof renderReceber === 'function') renderReceber();
+    if (typeof renderPagar === 'function') renderPagar();
+    if (typeof renderPedidos === 'function') renderPedidos();
+    atualizarBadgePendentes();
+    atualizarDatalist('clientesList', [...new Set(lancamentos.filter(l => l.cliente).map(l => l.cliente))]);
+    atualizarDatalist('pedidosList', pedidos.map(p => p.numero + (p.cliente ? ' — ' + p.cliente : '')));
+    construirFiltroChips();
+    if (!silencioso) showToast('✓ dados atualizados');
+  } catch (e) {
+    setSyncError();
+    if (!silencioso) showToast('✗ erro ao atualizar: ' + e.message);
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init(){
   const now=new Date();
@@ -912,6 +984,10 @@ async function init(){
     atualizarDatalist('clientesList',[...new Set(lancamentos.filter(l=>l.cliente).map(l=>l.cliente))]);
     atualizarDatalist('pedidosList',pedidos.map(p=>p.numero+(p.cliente?' — '+p.cliente:'')));
     construirFiltroChips();
+    if (!window._autoRefreshIniciado) {
+      window._autoRefreshIniciado = true;
+      setInterval(() => recarregarDados(true), 60000); // atualiza sozinho a cada 1 min, sem popup
+    }
   }catch(e){
     clearTimeout(timeout);
     console.error('Erro no init:',e);
@@ -2036,6 +2112,24 @@ async function salvarContas(){
   }catch(e){setSyncError();showToast('✗ erro: '+e.message)}
 }
 const getNomeConta=chave=>contasConfig.find(c=>c.chave===chave)?.nome||chave||'—';
+
+async function adicionarConta(){
+  const nome=prompt('Nome da conta (ex: PagBank, Nubank, Stone...):');
+  if(!nome||!nome.trim())return;
+  let chave=nome.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  if(!chave){showToast('✗ nome inválido');return}
+  if(contasConfig.find(c=>c.chave===chave)){showToast('⚠ já existe uma conta com essa chave');return}
+  const saldoStr=prompt('Saldo inicial dessa conta (R$), ou deixe em branco para 0:','0');
+  const saldo_inicial=parseFloat(saldoStr)||0;
+  const data_saldo=new Date().toISOString().split('T')[0];
+  setSyncing();
+  try{
+    const [nova]=await sbInsert('contas_config',{chave,nome:nome.trim(),saldo_inicial,data_saldo});
+    contasConfig.push(nova);
+    setSynced();showToast(`✓ conta "${nome.trim()}" adicionada`);
+    renderContas();renderContaSelect();
+  }catch(e){setSyncError();showToast('✗ erro: '+e.message)}
+}
 
 // ── DISTRIBUIÇÃO ──────────────────────────────────────────────────────────────
 function renderDistribuicao(){

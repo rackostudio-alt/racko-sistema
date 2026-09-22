@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>rackō — Controle de Vendas</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0d0a; color: #f0e4cc; min-height: 100vh; }
+
+.header { background: #0f0d0a; color: #f0e4cc; padding: 16px 20px; text-align: center; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid rgba(212,168,58,.35); }
+.header h1 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 24px; letter-spacing: 3px; font-weight: 600; color: #d4a83a; }
+.header p { font-size: 12px; letter-spacing: 1px; color: #a89880; margin-top: 3px; }
+
+.tabs { display: flex; background: #161208; overflow-x: auto; border-bottom: 1px solid rgba(212,168,58,.2); }
+.tab { flex: 1; min-width: 70px; padding: 12px 8px; text-align: center; color: #a89880; font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+.tab.active { color: #f0e4cc; border-bottom-color: #d4a83a; }
+
+.content { padding: 14px; max-width: 520px; margin: 0 auto; display: none; }
+.content.active { display: block; }
+
+.card { background: #161208; border: 1px solid rgba(212,168,58,.25); border-radius: 12px; padding: 18px; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+.card h2 { font-size: 17px; color: #e8c060; margin-bottom: 14px; font-weight: 700; }
+.sec { font-size: 13px; color: #e8c060; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(212,168,58,.25); }
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; color: #e8dcc0; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 12px 14px; border: 1.5px solid rgba(212,168,58,.5); border-radius: 8px;
+  font-size: 18px; font-weight: 500; color: #faf3e2; background: #211c15; outline: none;
+  -webkit-appearance: none; transition: border 0.2s; font-family: 'Rajdhani', sans-serif;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: #e8c060; background: #2a2210; }
+.field textarea { height: 70px; resize: none; }
+.field select option { background: #211c15; color: #f0e4cc; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Produtos */
+.produto-bloco { margin-bottom: 12px; }
+.produto-item { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.produto-item input { flex: 1; padding: 11px 13px; border: 1.5px solid rgba(212,168,58,.5); border-radius: 8px; font-size: 16px; font-weight: 500; color: #faf3e2; background: #211c15; }
+.produto-item input:focus { border-color: #e8c060; outline: none; }
+.produto-precos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-left: 4px; }
+.produto-divider { border-bottom: 1px dashed rgba(212,168,58,.3); margin-top: 8px; margin-bottom: 4px; }
+.btn-rem { background: rgba(217,83,79,.18); color: #ff8a80; border: 1px solid rgba(217,83,79,.35); border-radius: 6px; padding: 9px 11px; cursor: pointer; font-size: 15px; flex-shrink: 0; }
+.btn-add-prod { width: 100%; padding: 11px; border: 2px dashed rgba(212,168,58,.5); border-radius: 8px; background: none; color: #e8c060; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 4px; }
+
+/* Pagamento */
+.pag-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pag-btn { padding: 12px; border: 2px solid rgba(212,168,58,.4); border-radius: 8px; text-align: center; cursor: pointer; font-size: 15px; font-weight: 600; color: #e8c060; background: #1e1a14; transition: all 0.2s; }
+.pag-btn.sel { border-color: #d4a83a; background: #d4a83a; color: #0f0d0a; font-weight: 700; }
+
+/* Status */
+.st-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.st-btn { padding: 11px 4px; border: 2px solid rgba(212,168,58,.4); border-radius: 8px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 600; color: #e8c060; background: #1e1a14; }
+.st-btn.pago { border-color: #43a047; background: #43a047; color: #fff; }
+.st-btn.pendente { border-color: #f57c00; background: #f57c00; color: #fff; }
+.st-btn.parcial { border-color: #1e88e5; background: #1e88e5; color: #fff; }
+
+/* Toggle */
+.tog-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-top: 1px solid rgba(212,168,58,.2); }
+.tog-row span { font-size: 15px; font-weight: 600; }
+.tog { width: 46px; height: 26px; background: #3a342a; border-radius: 13px; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+.tog.on { background: #d4a83a; }
+.tog::after { content: ''; position: absolute; width: 22px; height: 22px; background: #f0e4cc; border-radius: 50%; top: 2px; left: 2px; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+.tog.on::after { left: 22px; background: #0f0d0a; }
+
+.parc-row { display: none; margin-bottom: 12px; }
+.parc-row.show { display: block; }
+
+.btn-salvar { width: 100%; padding: 16px; background: #d4a83a; color: #0f0d0a; border: none; border-radius: 10px; font-size: 18px; font-weight: 700; cursor: pointer; letter-spacing: 1px; margin-top: 6px; font-family: 'Rajdhani', sans-serif; }
+.btn-salvar:active { background: #e8c060; transform: scale(0.99); }
+
+/* Filtros */
+.filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.fbtn { padding: 7px 14px; border-radius: 20px; border: 1.5px solid rgba(212,168,58,.4); font-size: 13px; font-weight: 600; cursor: pointer; background: #1e1a14; color: #e8c060; }
+.fbtn.on { background: #d4a83a; color: #0f0d0a; border-color: #d4a83a; }
+
+/* Busca */
+.busca { width: 100%; padding: 12px 14px; border: 1.5px solid rgba(212,168,58,.5); border-radius: 8px; font-size: 16px; font-weight: 500; color: #faf3e2; background: #211c15; margin-bottom: 10px; outline: none; }
+.busca:focus { border-color: #e8c060; }
+.busca::placeholder { color: #a89880; }
+
+/* Cards de venda */
+.venda-card { background: #161208; border: 1px solid rgba(212,168,58,.15); border-radius: 10px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border-left: 4px solid rgba(212,168,58,.3); }
+.venda-card.pago { border-left-color: #43a047; }
+.venda-card.pendente { border-left-color: #f57c00; }
+.venda-card.parcial { border-left-color: #1e88e5; }
+
+.vc-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+.vc-cliente { font-size: 16px; font-weight: 700; color: #f0e4cc; }
+.vc-data { font-size: 12px; color: #a89880; }
+.vc-produtos { font-size: 14px; font-weight: 500; color: #d8c8a0; margin-bottom: 6px; }
+.vc-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+.vc-valor { font-size: 21px; font-weight: 700; color: #e8c060; }
+.vc-etiqueta { font-size: 12px; color: #8a8074; text-decoration: line-through; }
+
+.badge { display: inline-block; padding: 4px 9px; border-radius: 20px; font-size: 12px; font-weight: 700; margin: 2px 2px 0 0; }
+.b-pix { background: rgba(67,160,71,.18); color: #66bb6a; }
+.b-debito { background: rgba(30,136,229,.18); color: #64b5f6; }
+.b-credito { background: rgba(245,124,0,.18); color: #ffb74d; }
+.b-dinheiro { background: rgba(142,68,173,.2); color: #ba68c8; }
+.b-enc { background: rgba(217,83,79,.2); color: #ef5350; }
+.b-pago { background: rgba(67,160,71,.18); color: #66bb6a; }
+.b-pendente { background: rgba(245,124,0,.18); color: #ffb74d; }
+.b-parcial { background: rgba(30,136,229,.18); color: #64b5f6; }
+
+.vc-acoes { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.btn-wpp { padding: 8px 13px; background: #25d366; color: #0f0d0a; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 700; }
+.btn-mpago { padding: 8px 13px; background: #43a047; color: #fff; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 700; }
+.btn-del { padding: 8px 11px; background: rgba(217,83,79,.18); color: #ef5350; border: 1px solid rgba(217,83,79,.35); border-radius: 7px; font-size: 13px; cursor: pointer; font-weight: 700; }
+
+.empty { text-align: center; padding: 40px 20px; color: #a89880; }
+.empty .ico { font-size: 44px; margin-bottom: 10px; }
+.empty p { font-size: 15px; }
+
+/* Resumo */
+.res-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.res-card { background: #161208; border: 1px solid rgba(212,168,58,.2); border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.res-card .rv { font-size: 23px; font-weight: 700; color: #e8c060; }
+.res-card .rl { font-size: 12px; font-weight: 600; color: #c8b89c; text-transform: uppercase; margin-top: 3px; }
+.res-card.dest { background: #d4a83a; grid-column: span 2; border: none; }
+.res-card.dest .rv { color: #0f0d0a; font-size: 27px; }
+.res-card.dest .rl { color: rgba(15,13,10,.75); }
+.res-card.pend { background: rgba(245,124,0,.15); border-color: rgba(245,124,0,.35); }
+.res-card.pend .rv { color: #ffb74d; }
+
+.dia-group { margin-bottom: 16px; }
+.dia-header { background: rgba(212,168,58,.15); border: 1px solid rgba(212,168,58,.35); color: #e8c060; padding: 9px 14px; border-radius: 8px; font-size: 15px; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; }
+
+.btn-exp { width: 100%; padding: 14px; background: transparent; color: #e8c060; border: 2px solid #d4a83a; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+
+.desc-info { font-size: 14px; font-weight: 600; color: #ef5350; margin: -8px 0 10px; }
+</style>
+
+<style>
+/* Config extra: campos "novos" (taxas, badges de sync) já herdam o tema acima */
+.btn-ghost { background: transparent; border: 2px solid rgba(212,168,58,.5); color: #e8c060; border-radius: 8px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="header" style="position:relative">
+  <h1>rackō</h1>
+  <p>Controle de Vendas · rackō</p>
+  <div onclick="sincronizarPendentes()" style="position:absolute;top:10px;right:14px;cursor:pointer;font-size:18px">
+    🔄<span id="badge-pendentes" style="display:none;position:absolute;top:-6px;right:-8px;background:#e65100;color:#fff;border-radius:10px;font-size:10px;padding:1px 5px;font-weight:700"></span>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="goTab('registrar',this)">➕ Registrar</div>
+  <div class="tab" onclick="goTab('vendas',this)">📋 Vendas</div>
+  <div class="tab" onclick="goTab('clientes',this)">👤 Clientes</div>
+  <div class="tab" onclick="goTab('resumo',this)">📊 Resumo</div>
+  <div class="tab" onclick="goTab('taxas',this)">⚙️ Taxas</div>
+</div>
+
+<!-- REGISTRAR -->
+<div id="tab-registrar" class="content active">
+<div class="card">
+  <h2>Nova Venda</h2>
+
+  <div class="sec">📅 Geral</div>
+  <div class="field"><label>Data</label><input type="date" id="data"></div>
+  <div class="field">
+    <label>Origem da Venda</label>
+    <select id="origem">
+      <option value="">Selecione a origem...</option>
+      <option value="Loja Torre de TV">🏪 Loja Torre de TV</option>
+      <option value="Loja Mãos Criativas">🏪 Loja Mãos Criativas</option>
+      <option value="Artesanato de Brasília">🏪 Artesanato de Brasília</option>
+      <option value="PARCKAH">🎪 PARCKAH</option>
+      <option value="Casa Cor 2026">🏠 Casa Cor 2026</option>
+      <option value="Fenacce 2026">🎪 Fenacce 2026</option>
+      <option value="Capital Moto Week">🏍️ Capital Moto Week</option>
+      <option value="Ateliê">🔨 Ateliê</option>
+      <option value="Instagram">📱 Instagram</option>
+      <option value="WhatsApp">💬 WhatsApp</option>
+      <option value="Indicação">🤝 Indicação</option>
+      <option value="Outro">✏️ Outro</option>
+    </select>
+  </div>
+  <div class="field" id="origem-outro-field" style="display:none">
+    <label>Especifique a origem</label>
+    <input type="text" id="origemOutro" placeholder="Ex: Feira do Cerrado, Cliente Maria...">
+  </div>
+
+  <div class="sec">💍 Produtos</div>
+  <div id="produtos-lista"></div>
+  <button class="btn-add-prod" onclick="addProduto()">+ Adicionar produto</button>
+
+  <div class="sec">👤 Cliente</div>
+  <div class="field"><label>Nome</label><input type="text" id="nomeCliente" placeholder="Nome ou apelido"></div>
+  <div class="field"><label>WhatsApp</label><input type="tel" id="telefone" placeholder="(XX) XXXXX-XXXX" inputmode="tel"></div>
+
+  <div class="sec">💳 Pagamento</div>
+  <div class="field" id="modo-field" style="display:none">
+    <label>Modo</label>
+    <div class="pag-grid" id="modo-pag-grid">
+      <div class="pag-btn sel" onclick="selModo(this,'maquininha')">🖲️ Maquininha</div>
+      <div class="pag-btn" onclick="selModo(this,'tapon')">📱 Tap On</div>
+    </div>
+  </div>
+  <div class="field">
+    <label>Forma</label>
+    <div class="pag-grid" id="forma-pag-grid">
+      <div class="pag-btn" onclick="selPag(this,'Pix')">💚 Pix</div>
+      <div class="pag-btn" onclick="selPag(this,'Débito')">💳 Débito</div>
+      <div class="pag-btn" onclick="selPag(this,'Crédito')">💰 Crédito</div>
+      <div class="pag-btn" onclick="selPag(this,'Dinheiro')">💵 Dinheiro</div>
+    </div>
+  </div>
+  <div class="field" id="bandeira-field" style="display:none">
+    <label>Bandeira</label>
+    <select id="bandeira" onchange="calcTaxaEAtualizar()"></select>
+  </div>
+  <div class="parc-row" id="parc-row">
+    <div class="field"><label>Parcelas</label>
+      <select id="parcelas" onchange="calcTaxaEAtualizar()">
+        <option value="1">1x</option><option value="2">2x</option><option value="3">3x</option>
+        <option value="4">4x</option><option value="5">5x</option><option value="6">6x</option>
+        <option value="7">7x</option><option value="8">8x</option><option value="9">9x</option>
+        <option value="10">10x</option><option value="11">11x</option><option value="12">12x</option>
+      </select>
+    </div>
+  </div>
+  <div class="field">
+    <label>Conta de recebimento</label>
+    <select id="conta" onchange="calcTaxaEAtualizar()"></select>
+  </div>
+  <div class="field" id="taxa-info" style="display:none;background:rgba(245,124,0,.15);border-radius:8px;padding:10px 13px;margin-bottom:12px">
+    <div id="taxa-encontrada-view" style="display:none">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffb74d">
+        <span>Taxa (<span id="taxa-pct">0</span>%):</span>
+        <span id="taxa-valor" style="font-weight:700">R$ 0,00</span>
+      </div>
+      <div id="taxa-prazo" style="font-size:11px;color:#ffb74d;margin-top:2px"></div>
+    </div>
+    <div id="taxa-manual-view" style="display:none">
+      <div style="font-size:12px;color:#ef5350;margin-bottom:6px">⚠ Taxa não cadastrada para esta conta ainda. Informe manualmente:</div>
+      <input type="number" id="taxa-manual-pct" step="0.01" placeholder="Taxa % desta venda" oninput="atualizarPreviaManual()">
+      <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#c8b89c;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="taxa-manual-salvar" checked style="width:auto"> salvar essa taxa para próximas vendas dessa conta
+      </label>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Status</label>
+    <div class="st-grid">
+      <div class="st-btn pago" id="s-pago" onclick="selSt('Pago')">✅ Pago</div>
+      <div class="st-btn" id="s-pendente" onclick="selSt('Pendente')">⏳ Pendente</div>
+      <div class="st-btn" id="s-parcial" onclick="selSt('Parcial')">🔵 Parcial</div>
+    </div>
+  </div>
+
+  <div class="card" style="background:#f5f0eb;padding:12px;margin-top:-8px">
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:#c8b89c">
+      <span>Total Etiqueta:</span>
+      <span id="total-etiqueta-display">R$ 0,00</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#e8c060;margin-top:4px">
+      <span>Total Negociado:</span>
+      <span id="total-vendido-display">R$ 0,00</span>
+    </div>
+    <div id="desc-info" class="desc-info" style="display:none"></div>
+  </div>
+  <input type="hidden" id="valorEtiqueta">
+  <input type="hidden" id="valorVendido">
+
+  <div class="sec">💵 Recebimento</div>
+  <div class="field">
+    <label>Valor pago pelo cliente agora (R$)</label>
+    <input type="number" id="valorRecebido" placeholder="Deixe igual ao total se pagou tudo" step="0.01" inputmode="decimal" oninput="calcSaldo()">
+  </div>
+  <div id="saldo-display" style="display:none;background:rgba(245,124,0,.15);border-radius:8px;padding:10px;margin-bottom:12px;display:flex;justify-content:space-between">
+    <span style="font-size:13px;color:#ffb74d">Saldo a Receber:</span>
+    <span id="saldo-valor" style="font-size:13px;font-weight:700;color:#ffb74d">R$ 0,00</span>
+  </div>
+
+  <div class="tog-row">
+    <span style="font-size:14px;color:#e8c060;font-weight:500;">🔖 Encomenda?</span>
+    <div class="tog" id="tog-enc" onclick="togEnc()"></div>
+  </div>
+
+  <div class="field" style="margin-top:12px;">
+    <label>Observação</label>
+    <textarea id="obs" placeholder="Prazo de entrega, detalhes..."></textarea>
+  </div>
+
+  <button class="btn-salvar" onclick="salvar()">SALVAR VENDA</button>
+</div>
+</div>
+
+<!-- VENDAS -->
+<div id="tab-vendas" class="content">
+  <button class="btn-exp" onclick="exportar()">📤 Exportar Relatório</button>
+  <input class="busca" type="date" id="busca-data" onchange="renderVendas()" placeholder="Filtrar por data">
+  <div class="filtros">
+    <button class="fbtn on" onclick="setF('todos',this)">Todos</button>
+    <button class="fbtn" onclick="setF('Pago',this)">✅ Pagos</button>
+    <button class="fbtn" onclick="setF('Pendente',this)">⏳ Pendentes</button>
+    <button class="fbtn" onclick="setF('Parcial',this)">🔵 Parcial</button>
+    <button class="fbtn" onclick="setF('enc',this)">🔖 Encomendas</button>
+  </div>
+  <div id="lista-vendas"></div>
+</div>
+
+<!-- CLIENTES -->
+<div id="tab-clientes" class="content">
+  <input class="busca" type="text" id="busca-cliente" oninput="renderClientes()" placeholder="🔍 Buscar cliente...">
+  <div id="lista-clientes"></div>
+</div>
+
+<!-- RESUMO -->
+<div id="tab-resumo" class="content">
+  <div class="res-grid" id="res-geral"></div>
+  <div id="res-dias"></div>
+</div>
+
+<!-- TAXAS -->
+<div id="tab-taxas" class="content">
+  <div class="card">
+    <h2>Taxas por conta / maquininha</h2>
+    <div class="field">
+      <label>Conta</label>
+      <select id="taxas-conta" onchange="renderTaxasConta()"></select>
+    </div>
+    <div id="taxas-lista" style="margin:10px 0"></div>
+    <button class="btn-add-prod" onclick="carregarExemploPagBank()">📥 Carregar taxas de exemplo (PagBank)</button>
+  </div>
+
+  <div class="card">
+    <h2>+ Adicionar taxa</h2>
+    <div class="row2">
+      <div class="field"><label>Modo</label>
+        <select id="nt-modo"><option value="maquininha">Maquininha</option><option value="tapon">Tap On</option><option value="online">Online (link/boleto)</option></select>
+      </div>
+      <div class="field"><label>Forma</label>
+        <select id="nt-tipo" onchange="atualizarBandeiraNovaTaxa()"><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select>
+      </div>
+    </div>
+    <div class="field" id="nt-bandeira-field">
+      <label>Bandeira</label>
+      <select id="nt-bandeira">
+        <option value="visa_master">Visa / Mastercard</option>
+        <option value="elo_hiper">Elo / Hipercard</option>
+        <option value="diners">Diners</option>
+        <option value="outras">Outras</option>
+        <option value="todas">Todas</option>
+      </select>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Parcela (1 = à vista)</label><input type="number" id="nt-parcela" value="1" min="1" max="18"></div>
+      <div class="field"><label>Taxa (%)</label><input type="number" id="nt-taxa" step="0.01" placeholder="Ex: 2,75"></div>
+    </div>
+    <div class="field"><label>Dias para receber (0 = na hora)</label><input type="number" id="nt-dias" value="0" min="0"></div>
+    <button class="btn-salvar" onclick="adicionarTaxa()">Adicionar</button>
+  </div>
+</div>
+
+<script>
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwX5yapJ7Wr_o1SDYT1S96j8mXzzh_X9guFTq5SOISCID9yt-uICEAkyxqyFN4ATwxedQ/exec';
+
+// ══════════════════════════════
+// SUPABASE — mesmo projeto do racko-sistema (mheaekdzqdovryioxicj)
+// ══════════════════════════════
+const SB_URL='https://mheaekdzqdovryioxicj.supabase.co';
+const SB_KEY='sb_publishable_wCEHKzmkwOnLoobGHkuYsA_-d5nTZLq';
+const SB_API=p=>`${SB_URL}/rest/v1/${p}`;
+const SB_H={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=representation'};
+const sbGet=async(t,q='')=>{const r=await fetch(SB_API(t)+(q?'?'+q:''),{headers:{...SB_H,'Prefer':''}});if(!r.ok)throw new Error(await r.text());return r.json()};
+const sbInsert=async(t,d)=>{const r=await fetch(SB_API(t),{method:'POST',headers:SB_H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json()};
+
+// ══════════════════════════════
+// TAXAS POR CONTA — agora vêm do Supabase (tabela taxas_cartao), não fixas no código.
+// Cada conta (maquininha/operadora) tem sua própria tabela de taxas, editável na aba ⚙️ Taxas.
+// ══════════════════════════════
+let taxasCartao = [];
+async function carregarTaxasCartao() {
+  try { taxasCartao = await sbGet('taxas_cartao'); }
+  catch (e) { console.warn('Não foi possível carregar taxas_cartao (a tabela pode não existir ainda no Supabase).'); taxasCartao = []; }
+}
+
+function buscarTaxa(conta, modo, tipo, bandeira, parcelas) {
+  let rows = taxasCartao.filter(r => r.conta === conta && r.tipo === tipo && (tipo === 'pix' || r.modo === modo) && (tipo === 'pix' || r.bandeira === bandeira || r.bandeira === 'todas'));
+  if (!rows.length) return null;
+  const exata = rows.find(r => Number(r.parcela) === parcelas);
+  if (exata) return exata;
+  const menores = rows.filter(r => Number(r.parcela) < parcelas).sort((a,b) => b.parcela - a.parcela);
+  if (menores.length) return menores[0];
+  const maiores = rows.filter(r => Number(r.parcela) > parcelas).sort((a,b) => a.parcela - b.parcela);
+  return maiores[0] || null;
+}
+
+function calcularTaxaDB(valor, conta, modo, tipoPag, bandeira, parcelas) {
+  parcelas = parcelas || 1;
+  if (tipoPag === 'Dinheiro' || !tipoPag) return { pct:0, valorTaxa:0, valorLiquido:valor, diasRecebimento:0, encontrada:true };
+  const tipoKey = { 'Pix':'pix', 'Débito':'debito', 'Crédito':'credito' }[tipoPag];
+  const row = buscarTaxa(conta, modo, tipoKey, bandeira, parcelas);
+  if (!row) return { pct:0, valorTaxa:0, valorLiquido:valor, diasRecebimento:0, encontrada:false };
+  const pct = Number(row.taxa_pct);
+  const valorTaxa = +(valor * pct / 100).toFixed(2);
+  const valorLiquido = +(valor - valorTaxa).toFixed(2);
+  return { pct, valorTaxa, valorLiquido, diasRecebimento: Number(row.dias_recebimento) || 0, encontrada: true };
+}
+
+// Dados de exemplo do PagBank (Plano Essencial), validados por simulação real — usados só para
+// popular rapidamente a aba ⚙️ Taxas na conta que você escolher; não afetam o cálculo diretamente.
+const EXEMPLO_PAGBANK = [
+  {modo:'maquininha',tipo:'pix',bandeira:'todas',parcela:1,taxa_pct:0.10,dias_recebimento:0},
+  {modo:'maquininha',tipo:'debito',bandeira:'visa_master',parcela:1,taxa_pct:0.75,dias_recebimento:0},
+  {modo:'maquininha',tipo:'debito',bandeira:'outras',parcela:1,taxa_pct:2.98,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:1,taxa_pct:2.75,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:2,taxa_pct:5.18,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:3,taxa_pct:5.99,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:4,taxa_pct:6.79,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:5,taxa_pct:7.58,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:6,taxa_pct:8.36,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:7,taxa_pct:11.42,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:8,taxa_pct:12.18,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:9,taxa_pct:12.94,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:10,taxa_pct:13.69,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:11,taxa_pct:14.43,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:12,taxa_pct:15.16,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'elo_hiper',parcela:1,taxa_pct:4.99,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'elo_hiper',parcela:2,taxa_pct:5.99,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'diners',parcela:1,taxa_pct:3.19,dias_recebimento:30},
+  {modo:'maquininha',tipo:'credito',bandeira:'diners',parcela:2,taxa_pct:3.79,dias_recebimento:30},
+  {modo:'tapon',tipo:'debito',bandeira:'todas',parcela:1,taxa_pct:0.88,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:1,taxa_pct:3.14,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:2,taxa_pct:2.47,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:7,taxa_pct:2.78,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:13,taxa_pct:5.59,dias_recebimento:0}
+];
+
+async function carregarExemploPagBank() {
+  const conta = document.getElementById('taxas-conta').value;
+  if (!conta) { showToastVendas('Selecione uma conta primeiro.'); return; }
+  if (!confirm(`Isso vai adicionar as taxas de exemplo do PagBank na conta "${getNomeContaVendas(conta)}". Continuar?`)) return;
+  try {
+    const linhas = EXEMPLO_PAGBANK.map(t => ({ conta, ...t }));
+    const inseridas = await sbInsert('taxas_cartao', linhas);
+    taxasCartao.push(...inseridas);
+    renderTaxasConta();
+    showToastVendas('✓ Taxas de exemplo carregadas.');
+  } catch (e) { showToastVendas('✗ Erro ao carregar: ' + e.message); }
+}
+
+function getNomeContaVendas(chave) { return contasConfig.find(c => c.chave === chave)?.nome || chave; }
+
+function renderTaxasSelectConta() {
+  const sel = document.getElementById('taxas-conta');
+  if (sel) sel.innerHTML = contasConfig.map(c => `<option value="${c.chave}">${c.nome}</option>`).join('');
+}
+
+const LABELS_BANDEIRA = { visa_master:'Visa/Master', elo_hiper:'Elo/Hipercard', diners:'Diners', outras:'Outras', todas:'Todas' };
+const LABELS_TIPO = { pix:'Pix', debito:'Débito', credito:'Crédito' };
+const LABELS_MODO = { maquininha:'Maquininha', tapon:'Tap On', online:'Online' };
+
+function renderTaxasConta() {
+  const conta = document.getElementById('taxas-conta')?.value;
+  const el = document.getElementById('taxas-lista');
+  if (!el) return;
+  const linhas = taxasCartao.filter(r => r.conta === conta).sort((a,b) => a.modo.localeCompare(b.modo) || a.tipo.localeCompare(b.tipo) || a.parcela - b.parcela);
+  if (!linhas.length) { el.innerHTML = '<div class="empty" style="padding:16px"><p>Nenhuma taxa cadastrada para esta conta ainda.</p></div>'; return; }
+  el.innerHTML = linhas.map(r => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0e8e0;font-size:13px">
+      <span>${LABELS_MODO[r.modo]||r.modo} · ${LABELS_TIPO[r.tipo]||r.tipo}${r.tipo!=='pix' ? ' · '+(LABELS_BANDEIRA[r.bandeira]||r.bandeira) : ''} · ${r.parcela===1?'à vista':r.parcela+'x'}</span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <strong>${Number(r.taxa_pct).toFixed(2)}%</strong>
+        ${r.dias_recebimento > 0 ? `<span style="color:#ffb74d;font-size:11px">⏳${r.dias_recebimento}d</span>` : ''}
+        <button class="btn-rem" onclick="removerTaxa(${r.id})">✕</button>
+      </span>
+    </div>`).join('');
+}
+
+async function removerTaxa(id) {
+  if (!confirm('Remover essa taxa?')) return;
+  try {
+    await fetch(SB_API('taxas_cartao') + '?id=eq.' + id, { method: 'DELETE', headers: SB_H });
+    taxasCartao = taxasCartao.filter(r => r.id !== id);
+    renderTaxasConta();
+  } catch (e) { showToastVendas('✗ Erro ao remover: ' + e.message); }
+}
+
+function atualizarBandeiraNovaTaxa() {
+  document.getElementById('nt-bandeira-field').style.display = document.getElementById('nt-tipo').value === 'pix' ? 'none' : 'block';
+}
+
+async function adicionarTaxa() {
+  const conta = document.getElementById('taxas-conta').value;
+  if (!conta) { showToastVendas('Selecione uma conta.'); return; }
+  const modo = document.getElementById('nt-modo').value;
+  const tipo = document.getElementById('nt-tipo').value;
+  const bandeira = tipo === 'pix' ? 'todas' : document.getElementById('nt-bandeira').value;
+  const parcela = parseInt(document.getElementById('nt-parcela').value) || 1;
+  const taxa_pct = parseFloat(document.getElementById('nt-taxa').value);
+  const dias_recebimento = parseInt(document.getElementById('nt-dias').value) || 0;
+  if (isNaN(taxa_pct)) { showToastVendas('Informe a taxa em %.'); return; }
+  try {
+    const [nova] = await sbInsert('taxas_cartao', { conta, modo, tipo, bandeira, parcela, taxa_pct, dias_recebimento });
+    taxasCartao.push(nova);
+    renderTaxasConta();
+    showToastVendas('✓ Taxa adicionada.');
+    document.getElementById('nt-taxa').value = '';
+  } catch (e) { showToastVendas('✗ Erro: ' + e.message); }
+}
+
+function addDias(dataStr, dias) {
+  const d = new Date(dataStr + 'T00:00:00');
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().split('T')[0];
+}
+
+// Origem da venda -> categoria financeira (loja/ateliê = 'venda', evento/feira = 'evento_entrada')
+const ORIGENS_EVENTO = ['PARCKAH','Casa Cor 2026','Fenacce 2026','Capital Moto Week'];
+function categoriaEntrada(origem) { return ORIGENS_EVENTO.includes(origem) ? 'evento_entrada' : 'venda'; }
+
+let contasConfig = [{chave:'caixa',nome:'Caixa'}]; // fallback; recarregado do Supabase no load
+async function carregarContas() {
+  try {
+    const rows = await sbGet('contas_config');
+    if (rows.length) contasConfig = rows;
+  } catch (e) { console.warn('Não foi possível carregar contas do Supabase, usando padrão.'); }
+  const sel = document.getElementById('conta');
+  if (sel) sel.innerHTML = contasConfig.map(c => `<option value="${c.chave}">${c.nome}</option>`).join('');
+}
+
+let vendas = JSON.parse(localStorage.getItem('racko_v3') || '[]');
+let pendentesSync = JSON.parse(localStorage.getItem('racko_pendentes_sync') || '[]');
+let pag = '', status = 'Pago', enc = false, filtro = 'todos', modoPag = 'maquininha';
+
+function salvarLS() { localStorage.setItem('racko_v3', JSON.stringify(vendas)); }
+function salvarPendentesLS() { localStorage.setItem('racko_pendentes_sync', JSON.stringify(pendentesSync)); }
+
+async function enviarParaSheet(venda) {
+  try {
+    await fetch(SHEET_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: venda.data,
+        produtos: (venda.produtosDetalhados || []).map(p => `${p.nome} (Etiq: R$${p.etiqueta||0} / Vend: R$${p.vendido||0})`).join(' | ') || (venda.produtos || []).join(', '),
+        nomeCliente: venda.nomeCliente || '',
+        telefone: venda.telefone || '',
+        valorEtiqueta: venda.valorEtiqueta || 0,
+        valorVendido: venda.valorVendido,
+        pagamento: venda.pagamento,
+        parcelas: venda.parcelas || 1,
+        status: venda.status || 'Pago',
+        encomenda: venda.encomenda || false,
+        obs: venda.obs || '',
+        origem: venda.origem || '',
+        valorRecebido: venda.valorRecebido || venda.valorVendido,
+        saldoReceber: venda.saldoReceber || 0
+      })
+    });
+  } catch(e) {
+    console.log('Erro ao enviar para planilha:', e);
+  }
+}
+
+// TABS
+function goTab(id, el) {
+  document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  el.classList.add('active');
+  if (id === 'vendas') renderVendas();
+  if (id === 'clientes') renderClientes();
+  if (id === 'resumo') renderResumo();
+  if (id === 'taxas') { renderTaxasSelectConta(); renderTaxasConta(); }
+}
+
+// PRODUTOS
+function addProduto() {
+  const id = Date.now();
+  const div = document.createElement('div');
+  div.className = 'produto-bloco';
+  div.id = 'p-' + id;
+  div.innerHTML = `
+    <div class="produto-item">
+      <input type="text" placeholder="Ex: Brinco gota verde..." data-id="${id}" data-field="nome">
+      <button class="btn-rem" onclick="remProduto(${id})">✕</button>
+    </div>
+    <div class="produto-precos">
+      <div class="field" style="margin-bottom:6px">
+        <label>Etiqueta (R$)</label>
+        <input type="number" placeholder="0,00" step="0.01" inputmode="decimal" data-id="${id}" data-field="etiqueta" oninput="calcTotais()">
+      </div>
+      <div class="field" style="margin-bottom:6px">
+        <label>Vendido (R$)</label>
+        <input type="number" placeholder="0,00" step="0.01" inputmode="decimal" data-id="${id}" data-field="vendido" oninput="calcTotais()">
+      </div>
+    </div>
+    <div class="produto-divider"></div>
+  `;
+  document.getElementById('produtos-lista').appendChild(div);
+}
+
+function remProduto(id) {
+  const el = document.getElementById('p-' + id);
+  if (el) el.remove();
+}
+
+function getProdutos() {
+  const blocos = document.querySelectorAll('.produto-bloco');
+  return Array.from(blocos).map(b => {
+    const nome = b.querySelector('[data-field="nome"]').value.trim();
+    const etiqueta = parseFloat(b.querySelector('[data-field="etiqueta"]').value) || 0;
+    const vendido = parseFloat(b.querySelector('[data-field="vendido"]').value) || 0;
+    return { nome, etiqueta, vendido };
+  }).filter(p => p.nome);
+}
+
+function calcTotais() {
+  const prods = getProdutos();
+  const totalEt = prods.reduce((s,p) => s + p.etiqueta, 0);
+  const totalVend = prods.reduce((s,p) => s + p.vendido, 0);
+  document.getElementById('valorVendido').value = totalVend.toFixed(2);
+  document.getElementById('valorEtiqueta').value = totalEt.toFixed(2);
+  document.getElementById('total-etiqueta-display').textContent = 'R$ ' + totalEt.toFixed(2);
+  document.getElementById('total-vendido-display').textContent = 'R$ ' + totalVend.toFixed(2);
+  calcDesc();
+  calcTaxaEAtualizar();
+}
+
+// FORM
+function selModo(el, modo) {
+  document.querySelectorAll('#modo-pag-grid .pag-btn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel'); modoPag = modo;
+  atualizarOpcoesBandeira();
+  calcTaxaEAtualizar();
+}
+
+function selPag(el, tipo) {
+  document.querySelectorAll('#forma-pag-grid .pag-btn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel'); pag = tipo;
+  document.getElementById('parc-row').className = 'parc-row' + (tipo === 'Crédito' ? ' show' : '');
+
+  const precisaModo = (tipo === 'Débito' || tipo === 'Crédito');
+  document.getElementById('modo-field').style.display = precisaModo ? 'block' : 'none';
+  document.getElementById('bandeira-field').style.display = precisaModo ? 'block' : 'none';
+  if (precisaModo) atualizarOpcoesBandeira();
+  calcTaxaEAtualizar();
+}
+
+function atualizarOpcoesBandeira() {
+  const sel = document.getElementById('bandeira');
+  if (modoPag === 'tapon') {
+    // Tap On: sem distinção de bandeira nas taxas coletadas
+    sel.innerHTML = `<option value="todas">Todas as bandeiras</option>`;
+    return;
+  }
+  if (pag === 'Débito') {
+    sel.innerHTML = `<option value="visa_master">Visa / Mastercard (0,75%)</option><option value="outras">Elo / outras (2,98%)</option>`;
+  } else if (pag === 'Crédito') {
+    sel.innerHTML = `<option value="visa_master">Visa / Mastercard</option><option value="elo_hiper">Elo / Hipercard</option><option value="diners">Diners (recebe em 30 dias)</option>`;
+  }
+}
+
+function valorBaseTaxa() {
+  // A taxa da maquininha incide sobre o que passou de fato no cartão/pix AGORA,
+  // não sobre o valor total da venda (que pode incluir saldo a receber depois).
+  const vv = parseFloat(document.getElementById('valorVendido').value) || 0;
+  const raw = document.getElementById('valorRecebido').value;
+  if (raw === '') return vv; // campo ainda vazio = assume pagamento integral (placeholder "deixe igual ao total")
+  const vr = parseFloat(raw);
+  return isNaN(vr) ? vv : vr;
+}
+
+function calcTaxaEAtualizar() {
+  const base = valorBaseTaxa();
+  const conta = document.getElementById('conta')?.value || '';
+  const bandeira = document.getElementById('bandeira')?.value || '';
+  const parcelas = pag === 'Crédito' ? parseInt(document.getElementById('parcelas').value) : 1;
+  const taxaInfo = document.getElementById('taxa-info');
+  const viewOk = document.getElementById('taxa-encontrada-view');
+  const viewManual = document.getElementById('taxa-manual-view');
+
+  if (!base || !pag || pag === 'Dinheiro' || !conta) { taxaInfo.style.display = 'none'; window._ultimaTaxa = null; return; }
+
+  const r = calcularTaxaDB(base, conta, modoPag, pag, bandeira, parcelas);
+
+  if (r.encontrada) {
+    window._ultimaTaxa = r;
+    taxaInfo.style.display = r.pct > 0 ? 'block' : 'none';
+    viewOk.style.display = 'block'; viewManual.style.display = 'none';
+    document.getElementById('taxa-pct').textContent = r.pct.toFixed(2);
+    document.getElementById('taxa-valor').textContent = 'R$ ' + r.valorTaxa.toFixed(2);
+    document.getElementById('taxa-prazo').textContent = r.diasRecebimento > 0 ? `⚠ Recebe em ${r.diasRecebimento} dias, não na hora` : '';
+  } else {
+    window._ultimaTaxa = null; // será preenchido manualmente antes de salvar
+    taxaInfo.style.display = 'block';
+    viewOk.style.display = 'none'; viewManual.style.display = 'block';
+    document.getElementById('taxa-manual-pct').value = '';
+  }
+  // Nota: essa taxa é calculada sobre o valor recebido AGORA (base), não sobre o total da
+  // venda — se for pagamento parcial, o saldo restante não passou pela maquininha ainda.
+}
+
+function atualizarPreviaManual() {
+  const base = valorBaseTaxa();
+  const pct = parseFloat(document.getElementById('taxa-manual-pct').value) || 0;
+  window._ultimaTaxa = { pct, valorTaxa: +(base*pct/100).toFixed(2), valorLiquido: +(base-(base*pct/100)).toFixed(2), diasRecebimento: 0, encontrada: false };
+}
+
+function selSt(s) {
+  status = s;
+  ['pago','pendente','parcial'].forEach(x => {
+    document.getElementById('s-' + x).className = 'st-btn' + (x === s.toLowerCase() ? ' ' + x : '');
+  });
+}
+
+function togEnc() {
+  enc = !enc;
+  document.getElementById('tog-enc').className = 'tog' + (enc ? ' on' : '');
+}
+
+function calcDesc() {
+  const e = parseFloat(document.getElementById('valorEtiqueta').value) || 0;
+  const v = parseFloat(document.getElementById('valorVendido').value) || 0;
+  const el = document.getElementById('desc-info');
+  if (e > 0 && v > 0 && v < e) {
+    el.style.display = 'block';
+    el.textContent = `Desconto: ${((e-v)/e*100).toFixed(1)}% (R$ ${(e-v).toFixed(2)})`;
+  } else el.style.display = 'none';
+}
+
+function calcSaldo() {
+  const vv = parseFloat(document.getElementById('valorVendido').value) || 0;
+  const vr = parseFloat(document.getElementById('valorRecebido').value) || 0;
+  const saldo = vv - vr;
+  const el = document.getElementById('saldo-display');
+  if (vr > 0 && vr < vv) {
+    el.style.display = 'flex';
+    document.getElementById('saldo-valor').textContent = 'R$ ' + saldo.toFixed(2);
+    // auto set status to parcial
+    selSt('Parcial');
+  } else if (vr >= vv && vv > 0) {
+    el.style.display = 'none';
+    selSt('Pago');
+  } else {
+    el.style.display = 'none';
+  }
+  calcTaxaEAtualizar(); // a taxa incide sobre o valor recebido agora, não sobre o total
+}
+
+// Origem outro toggle
+document.getElementById('origem').addEventListener('change', function() {
+  document.getElementById('origem-outro-field').style.display = this.value === 'Outro' ? 'block' : 'none';
+});
+
+// Inicializar data
+document.getElementById('data').value = new Date().toISOString().split('T')[0];
+addProduto(); // produto inicial
+carregarContas().then(() => calcTaxaEAtualizar());
+carregarTaxasCartao();
+atualizarBadgePendentes();
+if (pendentesSync.length) sincronizarPendentes(); // tenta sincronizar sozinho ao abrir, se tiver internet
+
+async function salvar() {
+  const prods = getProdutos();
+  const vv = parseFloat(document.getElementById('valorVendido').value) || 0;
+  if (!prods.length) { alert('Adicione pelo menos um produto!'); return; }
+  if (!vv) { alert('Informe o valor vendido!'); return; }
+  if (prods.some(p => !p.vendido)) { alert('Informe o valor vendido de cada produto!'); return; }
+  if (!pag) { alert('Selecione a forma de pagamento!'); return; }
+
+  const bandeira = document.getElementById('bandeira')?.value || '';
+  const parcelas = pag === 'Crédito' ? parseInt(document.getElementById('parcelas').value) : 1;
+  const contaSelecionada = document.getElementById('conta')?.value || 'caixa';
+  const vrRaw = document.getElementById('valorRecebido').value;
+  const valorRecebidoAgora = vrRaw === '' ? vv : (parseFloat(vrRaw) || 0); // '' = assume pago integral; "0" explícito = nada recebido ainda
+  const precisaTaxa = (pag === 'Pix' || pag === 'Débito' || pag === 'Crédito') && valorRecebidoAgora > 0;
+  if (precisaTaxa && !window._ultimaTaxa) {
+    if (document.getElementById('taxa-manual-view').style.display === 'block') atualizarPreviaManual();
+    if (!window._ultimaTaxa || isNaN(window._ultimaTaxa.pct)) { alert('Informe a taxa desta venda (não está cadastrada para esta conta ainda).'); return; }
+  }
+  const { pct, valorTaxa, valorLiquido, diasRecebimento } = (precisaTaxa && window._ultimaTaxa) ? window._ultimaTaxa : { pct:0, valorTaxa:0, valorLiquido:valorRecebidoAgora, diasRecebimento:0 };
+  const eraManual = precisaTaxa && document.getElementById('taxa-manual-view').style.display === 'block';
+  const salvarTaxaParaFuturo = eraManual && document.getElementById('taxa-manual-salvar').checked;
+
+  const v = {
+    id: Date.now(),
+    data: document.getElementById('data').value,
+    produtos: prods.map(p => p.nome),
+    produtosDetalhados: prods,
+    nomeCliente: document.getElementById('nomeCliente').value.trim(),
+    telefone: document.getElementById('telefone').value.trim(),
+    valorEtiqueta: parseFloat(document.getElementById('valorEtiqueta').value) || 0,
+    valorVendido: vv,
+    totalEtiqueta: prods.reduce((s,p) => s + p.etiqueta, 0),
+    valorRecebido: valorRecebidoAgora,
+    saldoReceber: +(vv - valorRecebidoAgora).toFixed(2),
+    pagamento: pag,
+    modo: (pag === 'Débito' || pag === 'Crédito') ? modoPag : null,
+    bandeira: (pag === 'Débito' || pag === 'Crédito') ? bandeira : null,
+    parcelas,
+    pct, valorTaxa, valorLiquido, diasRecebimento,
+    status,
+    encomenda: enc,
+    obs: document.getElementById('obs').value.trim(),
+    conta: contaSelecionada,
+    origem: document.getElementById('origem').value === 'Outro' 
+      ? document.getElementById('origemOutro').value.trim() 
+      : document.getElementById('origem').value,
+    sincronizado: false
+  };
+
+  vendas.unshift(v);
+  salvarLS();
+  enviarParaSheet(v);
+
+  if (salvarTaxaParaFuturo) {
+    try {
+      const tipoKey = { 'Pix':'pix', 'Débito':'debito', 'Crédito':'credito' }[pag];
+      const [nova] = await sbInsert('taxas_cartao', {
+        conta: contaSelecionada, modo: modoPag, tipo: tipoKey,
+        bandeira: tipoKey === 'pix' ? 'todas' : (bandeira || 'todas'),
+        parcela: parcelas, taxa_pct: pct, dias_recebimento: diasRecebimento
+      });
+      taxasCartao.push(nova);
+    } catch (e) { console.warn('Não foi possível salvar a taxa para reuso futuro:', e.message); }
+  }
+
+  resetForm();
+  showToastVendas('✅ Venda registrada. Sincronizando com o financeiro…');
+
+  const ok = await tentarSincronizar(v);
+  showToastVendas(ok
+    ? '✓ Venda lançada no financeiro (venda' + (v.valorTaxa > 0 ? ' + taxa' : '') + ').'
+    : '⚠ Venda salva, mas sem internet/erro ao sincronizar. Ficou pendente — tentaremos de novo depois.');
+}
+
+function resetForm() {
+  document.getElementById('produtos-lista').innerHTML = '';
+  addProduto();
+  ['nomeCliente','telefone','valorEtiqueta','valorVendido','obs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('data').value = new Date().toISOString().split('T')[0];
+  document.querySelectorAll('#forma-pag-grid .pag-btn, #modo-pag-grid .pag-btn').forEach(b => b.classList.remove('sel'));
+  document.querySelector('#modo-pag-grid .pag-btn')?.classList.add('sel');
+  document.getElementById('parc-row').className = 'parc-row';
+  enc = false; pag = ''; status = 'Pago'; modoPag = 'maquininha';
+  document.getElementById('tog-enc').className = 'tog';
+  document.getElementById('desc-info').style.display = 'none';
+  document.getElementById('origem').value = '';
+  document.getElementById('origemOutro').value = '';
+  document.getElementById('origem-outro-field').style.display = 'none';
+  document.getElementById('valorRecebido').value = '';
+  document.getElementById('saldo-display').style.display = 'none';
+  document.getElementById('modo-field').style.display = 'none';
+  document.getElementById('bandeira-field').style.display = 'none';
+  document.getElementById('taxa-info').style.display = 'none';
+  window._ultimaTaxa = null;
+  selSt('Pago');
+}
+
+// HELPERS
+function fData(d) { if (!d) return ''; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+function bPag(p) { const m = {'Pix':'b-pix','Débito':'b-debito','Crédito':'b-credito','Dinheiro':'b-dinheiro'}; return `<span class="badge ${m[p]||''}">${p}</span>`; }
+function bSt(s) { const m = {'Pago':'b-pago','Pendente':'b-pendente','Parcial':'b-parcial'}; const i = {'Pago':'✅','Pendente':'⏳','Parcial':'🔵'}; return `<span class="badge ${m[s]||''}">${i[s]||''} ${s}</span>`; }
+
+function cardVenda(v) {
+  return `<div class="venda-card ${(v.status||'pago').toLowerCase()}">
+    <div class="vc-top">
+      <div class="vc-cliente">${v.nomeCliente || 'Cliente não informado'}</div>
+      <div class="vc-data">${fData(v.data)}</div>
+    </div>
+    <div class="vc-produtos">
+      ${(v.produtosDetalhados || (v.produtos||[v.produto]).map(n => ({nome:n, etiqueta:0, vendido:0}))).map(p => 
+        `<div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:13px">
+          <span>${p.nome}</span>
+          <span style="color:#e8c060;font-weight:600">
+            ${p.vendido ? 'R$ ' + p.vendido.toFixed(2) : ''}
+            ${p.etiqueta && p.etiqueta !== p.vendido ? '<span style="color:#aaa;text-decoration:line-through;font-size:11px;margin-left:4px">R$ ' + p.etiqueta.toFixed(2) + '</span>' : ''}
+          </span>
+        </div>`
+      ).join('')}
+    </div>
+    <div style="border-top:1px dashed rgba(212,168,58,.3);margin:6px 0;padding-top:6px;display:flex;justify-content:space-between;font-size:12px;color:#c8b89c">
+      <span>Total</span>
+      <span style="font-weight:700;color:#e8c060">R$ ${v.valorVendido.toFixed(2)}</span>
+    </div>
+    ${v.origem ? `<div style="font-size:11px;color:#c8b89c;margin-bottom:4px">📍 ${v.origem}</div>` : ''}
+    <div class="vc-bottom">
+      <div>
+        <div class="vc-valor">R$ ${v.valorVendido.toFixed(2)}</div>
+        ${v.valorEtiqueta && v.valorEtiqueta !== v.valorVendido ? `<div class="vc-etiqueta">R$ ${v.valorEtiqueta.toFixed(2)}</div>` : ''}
+        ${v.valorRecebido && v.valorRecebido < v.valorVendido ? `<div style="font-size:12px;color:#66bb6a;margin-top:2px">✅ Recebido: R$ ${v.valorRecebido.toFixed(2)}</div>` : ''}
+        ${v.saldoReceber && v.saldoReceber > 0 ? `<div style="font-size:12px;color:#ffb74d;margin-top:2px">⏳ Saldo: R$ ${v.saldoReceber.toFixed(2)}</div>` : ''}
+        ${v.valorTaxa > 0 ? `<div style="font-size:11px;color:#ef5350;margin-top:2px">💳 Taxa ~${v.pct?.toFixed(2)}%: R$ ${v.valorTaxa.toFixed(2)} · líquido R$ ${v.valorLiquido.toFixed(2)}</div>` : ''}
+      </div>
+      <div style="text-align:right">
+        ${bPag(v.pagamento)}
+        ${v.parcelas > 1 ? `<div style="font-size:11px;color:#c8b89c;margin-top:2px">${v.parcelas}x R$ ${(v.valorVendido/v.parcelas).toFixed(2)}</div>` : ''}
+        <div style="margin-top:3px">${bSt(v.status||'Pago')}${v.encomenda ? '<span class="badge b-enc">🔖 Enc</span>' : ''}</div>
+        <div style="font-size:10px;margin-top:3px;color:${v.sincronizado?'#66bb6a':'#ffb74d'}">${v.sincronizado ? '✓ no financeiro' : '⏳ pendente'}</div>
+      </div>
+    </div>
+    ${v.obs ? `<div style="font-size:12px;color:#c8b89c;margin-top:6px">📝 ${v.obs}</div>` : ''}
+    <div class="vc-acoes">
+      ${v.status !== 'Pago' ? `<button class="btn-mpago" onclick="marcarPago(${v.id})">✅ Marcar Pago</button>` : ''}
+      ${v.telefone ? `<button class="btn-wpp" onclick="abrirWpp('${v.telefone}','${(v.nomeCliente||'').replace(/'/g,"\\'")}','${((v.produtos||[v.produto]).join(', ')).replace(/'/g,"\\'")}','${v.valorVendido}')">💬 WhatsApp</button>` : ''}
+      <button class="btn-del" onclick="deletar(${v.id})">🗑️</button>
+    </div>
+  </div>`;
+}
+
+function marcarPago(id) {
+  const v = vendas.find(x => x.id === id);
+  if (v) { v.status = 'Pago'; salvarLS(); renderVendas(); }
+}
+
+function deletar(id) {
+  if (!confirm('Remover esta venda?')) return;
+  vendas = vendas.filter(v => v.id !== id);
+  salvarLS(); renderVendas();
+}
+
+// ══════════════════════════════
+// SINCRONIZAÇÃO COM O FINANCEIRO (lancamentos + parcelas)
+// ══════════════════════════════
+async function sincronizarComFinanceiro(v) {
+  const conta = v.conta || 'caixa';
+  const dataRecebimento = v.diasRecebimento > 0 ? addDias(v.data, v.diasRecebimento) : v.data;
+  const recebidoNaHora = v.diasRecebimento === 0;
+  const descProdutos = v.produtos.join(', ');
+
+  // Separa o que o cliente PAGOU AGORA (valorRecebido) do que ainda FICOU DEVENDO (saldoReceber).
+  // A venda inteira vira receita (valor total), mas só o que realmente passou pela
+  // maquininha/pix agora é que pode ser marcado como "baixado" na conta.
+  const recebidoAgora = Math.max(0, +(v.valorRecebido || 0).toFixed(2));
+  const saldo = Math.max(0, +(v.valorVendido - recebidoAgora).toFixed(2));
+
+  // 1) Lançamento de entrada — valor BRUTO total da venda (etiqueta/negociado)
+  const [lancVenda] = await sbInsert('lancamentos', {
+    tipo: 'entrada',
+    descricao: `${descProdutos} — ${v.nomeCliente || 'cliente não identificado'}`,
+    valor: v.valorVendido,
+    data: v.data,
+    cat: categoriaEntrada(v.origem),
+    conta,
+    obs: `Venda Rápida · ${v.origem || ''} · ${v.pagamento}${v.parcelas > 1 ? ' ' + v.parcelas + 'x' : ''}${saldo > 0 ? ' · pagamento parcial' : ''}`,
+    is_pessoal: false,
+    mes: v.data.substring(0, 7),
+    confirmado: saldo === 0 && recebidoNaHora,
+    tem_baixa: saldo === 0 && recebidoNaHora,
+    cliente: v.nomeCliente || null,
+    pedido_id: null,
+    recorrente: false
+  });
+
+  const parcelasVenda = [];
+  if (recebidoAgora > 0) {
+    parcelasVenda.push({
+      lancamento_id: lancVenda.id,
+      label: saldo > 0 ? 'entrada / sinal' : 'venda',
+      valor: recebidoAgora,
+      data_vencimento: dataRecebimento,
+      conta,
+      pago: recebidoNaHora,
+      tipo: 'entrada',
+      conta_baixa: recebidoNaHora ? conta : null,
+      data_baixa: recebidoNaHora ? v.data : null
+    });
+  }
+  if (saldo > 0) {
+    parcelasVenda.push({
+      lancamento_id: lancVenda.id,
+      label: 'saldo a receber',
+      valor: saldo,
+      data_vencimento: v.data, // data-base; ajuste na tela do financeiro se souber a data combinada
+      conta,
+      pago: false,
+      tipo: 'entrada',
+      conta_baixa: null,
+      data_baixa: null
+    });
+  }
+  if (parcelasVenda.length) await sbInsert('parcelas', parcelasVenda);
+
+  // 2) Lançamento de despesa — taxa da maquininha, incidindo só sobre o que foi
+  // efetivamente recebido agora por esse meio (não sobre o saldo ainda não cobrado)
+  if (v.valorTaxa > 0 && recebidoAgora > 0) {
+    const [lancTaxa] = await sbInsert('lancamentos', {
+      tipo: 'saida',
+      descricao: `Taxa maquininha — ${v.nomeCliente || 'venda'} (${v.pagamento}${v.parcelas > 1 ? ' ' + v.parcelas + 'x' : ''})`,
+      valor: v.valorTaxa,
+      data: v.data,
+      cat: 'taxa',
+      conta,
+      obs: `${v.pct}% sobre R$ ${recebidoAgora.toFixed(2)} (valor recebido agora) · estimado, ajustar na conciliação se necessário`,
+      is_pessoal: false,
+      mes: v.data.substring(0, 7),
+      confirmado: recebidoNaHora,
+      tem_baixa: recebidoNaHora,
+      cliente: null,
+      pedido_id: null,
+      recorrente: false
+    });
+    await sbInsert('parcelas', [{
+      lancamento_id: lancTaxa.id,
+      label: 'taxa maquininha',
+      valor: v.valorTaxa,
+      data_vencimento: dataRecebimento,
+      conta,
+      pago: recebidoNaHora,
+      tipo: 'saida',
+      conta_baixa: recebidoNaHora ? conta : null,
+      data_baixa: recebidoNaHora ? v.data : null
+    }]);
+  }
+}
+
+async function tentarSincronizar(v) {
+  try {
+    await sincronizarComFinanceiro(v);
+    v.sincronizado = true;
+    salvarLS();
+    return true;
+  } catch (e) {
+    console.warn('Falha ao sincronizar com o financeiro, guardando para retry:', e.message);
+    pendentesSync.push(v.id);
+    salvarPendentesLS();
+    atualizarBadgePendentes();
+    return false;
+  }
+}
+
+async function sincronizarPendentes() {
+  if (!pendentesSync.length) { showToastVendas('Nada pendente para sincronizar.'); return; }
+  const ids = [...pendentesSync];
+  let ok = 0;
+  for (const id of ids) {
+    const v = vendas.find(x => x.id === id);
+    if (!v) { pendentesSync = pendentesSync.filter(p => p !== id); continue; }
+    const sucesso = await tentarSincronizar(v);
+    if (sucesso) { pendentesSync = pendentesSync.filter(p => p !== id); ok++; }
+  }
+  salvarPendentesLS();
+  atualizarBadgePendentes();
+  showToastVendas(`✓ ${ok} venda(s) sincronizada(s) com o financeiro.`);
+}
+
+function atualizarBadgePendentes() {
+  const el = document.getElementById('badge-pendentes');
+  if (!el) return;
+  el.style.display = pendentesSync.length ? 'inline-block' : 'none';
+  el.textContent = pendentesSync.length;
+}
+
+function showToastVendas(msg) {
+  // Fallback simples; substitui alert() para não travar o fluxo no evento
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#161208;color:#f0e4cc;border:1px solid rgba(212,168,58,.4);padding:10px 18px;border-radius:8px;font-size:13px;z-index:9999;max-width:90%;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+function abrirWpp(tel, nome, prods, valor) {
+  const num = tel.replace(/\D/g,'');
+  const msg = encodeURIComponent(`Olá, ${nome}! 😊\n\nPassamos para agradecer imensamente pela sua confiança na *rackō studio de joias*! 🤍\n\nFoi um prazer atendê-la e esperamos que suas joias — *${prods}* — tragam ainda mais brilho à sua história.\n\nEstamos sempre à disposição para qualquer dúvida ou novo pedido.\n\nE se quiser compartilhar sua experiência, sua avaliação no Google significa muito para nós e ajuda outras pessoas a conhecerem a rackō. 🌟\n\n👉 https://share.google/E1biaKGQGEyCjwa5f\n\nCom carinho,\nKenya e Ronaldo\n📲 @racko_studio`);
+  window.open(`https://wa.me/55${num}?text=${msg}`, '_blank');
+}
+
+function setF(f, el) {
+  filtro = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  renderVendas();
+}
+
+function renderVendas() {
+  const dataFiltro = document.getElementById('busca-data').value;
+  let lista = [...vendas];
+  if (dataFiltro) lista = lista.filter(v => v.data === dataFiltro);
+  if (filtro === 'enc') lista = lista.filter(v => v.encomenda);
+  else if (filtro !== 'todos') lista = lista.filter(v => v.status === filtro);
+
+  const el = document.getElementById('lista-vendas');
+  if (!lista.length) { el.innerHTML = '<div class="empty"><div class="ico">💍</div><p>Nenhuma venda encontrada.</p></div>'; return; }
+  el.innerHTML = lista.map(v => cardVenda(v)).join('');
+}
+
+function renderClientes() {
+  const busca = (document.getElementById('busca-cliente').value || '').toLowerCase();
+  const map = {};
+  vendas.forEach(v => {
+    const nome = v.nomeCliente || 'Sem nome';
+    if (!map[nome]) map[nome] = { nome, tel: v.telefone, vendas: [] };
+    map[nome].vendas.push(v);
+  });
+
+  let lista = Object.values(map).filter(c => c.nome.toLowerCase().includes(busca));
+  const el = document.getElementById('lista-clientes');
+
+  if (!lista.length) { el.innerHTML = '<div class="empty"><div class="ico">👤</div><p>Nenhum cliente.</p></div>'; return; }
+
+  el.innerHTML = lista.map(c => {
+    const total = c.vendas.reduce((s,v) => s+v.valorVendido, 0);
+    const prods = c.vendas.flatMap(v => v.produtos || [v.produto]).join(', ');
+    return `<div class="venda-card pago" style="border-left-color:#c8a96e">
+      <div class="vc-top">
+        <div class="vc-cliente">👤 ${c.nome}</div>
+        <div class="vc-valor">R$ ${total.toFixed(2)}</div>
+      </div>
+      ${c.tel ? `<div style="font-size:12px;color:#c8b89c;margin-bottom:4px">📱 ${c.tel}</div>` : ''}
+      <div style="font-size:12px;color:#e8c060;margin-bottom:8px">${c.vendas.length} compra(s) · ${prods}</div>
+      ${c.tel ? `<button class="btn-wpp" onclick="abrirWpp('${c.tel}','${c.nome.replace(/'/g,"\\'")}','${prods.replace(/'/g,"\\'")}','${total}')">💬 Pós-venda WhatsApp</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderResumo() {
+  const total = vendas.reduce((s,v) => s+v.valorVendido, 0);
+  const totalEt = vendas.reduce((s,v) => s+(v.valorEtiqueta||v.valorVendido), 0);
+  const totalRecebido = vendas.reduce((s,v) => s+(v.valorRecebido||v.valorVendido), 0);
+  const totalSaldo = vendas.reduce((s,v) => s+(v.saldoReceber||0), 0);
+  const pend = vendas.filter(v => v.status !== 'Pago').reduce((s,v) => s+v.valorVendido, 0);
+  const encs = vendas.filter(v => v.encomenda).length;
+  const porPag = {};
+  vendas.forEach(v => { porPag[v.pagamento] = (porPag[v.pagamento]||0) + v.valorVendido; });
+
+  document.getElementById('res-geral').innerHTML = `
+    <div class="res-card dest"><div class="rv">R$ ${total.toFixed(2)}</div><div class="rl">Total · ${vendas.length} venda(s)</div></div>
+    <div class="res-card" style="background:rgba(67,160,71,.15)"><div class="rv" style="color:#66bb6a">R$ ${totalRecebido.toFixed(2)}</div><div class="rl">✅ Total Recebido</div></div>
+    ${totalSaldo > 0 ? `<div class="res-card pend"><div class="rv">R$ ${totalSaldo.toFixed(2)}</div><div class="rl">⏳ Saldo a Receber</div></div>` : ''}
+    ${(totalEt-total) > 0 ? `<div class="res-card"><div class="rv">R$ ${(totalEt-total).toFixed(2)}</div><div class="rl">Descontos</div></div>` : ''}
+    <div class="res-card"><div class="rv">${encs}</div><div class="rl">Encomendas</div></div>
+    ${Object.entries(porPag).map(([p,v]) => `<div class="res-card"><div class="rv">R$ ${v.toFixed(2)}</div><div class="rl">${p}</div></div>`).join('')}
+  `;
+
+  // Por dia
+  const dias = {};
+  vendas.forEach(v => { if (!dias[v.data]) dias[v.data] = []; dias[v.data].push(v); });
+  const diasOrd = Object.keys(dias).sort((a,b) => b.localeCompare(a));
+
+  document.getElementById('res-dias').innerHTML = diasOrd.map(d => {
+    const dvs = dias[d];
+    const dtotal = dvs.reduce((s,v) => s+v.valorVendido, 0);
+    return `<div class="dia-group">
+      <div class="dia-header"><span>📅 ${fData(d)}</span><span>R$ ${dtotal.toFixed(2)} · ${dvs.length} venda(s)</span></div>
+      ${dvs.map(v => cardVenda(v)).join('')}
+    </div>`;
+  }).join('');
+}
+
+function exportar() {
+  if (!vendas.length) { alert('Nenhuma venda para exportar.'); return; }
+  const total = vendas.reduce((s,v) => s+v.valorVendido, 0);
+  const pend = vendas.filter(v => v.status !== 'Pago').reduce((s,v) => s+v.valorVendido, 0);
+  let txt = `RELATÓRIO DE VENDAS — rackō studio de joias\nFenacce 2026\n${'='.repeat(44)}\n\n`;
+  vendas.forEach((v,i) => {
+    txt += `${i+1}. VENDA\n`;
+    (v.produtosDetalhados || (v.produtos||[v.produto]).map(n => ({nome:n}))).forEach(p => {
+      txt += `   - ${p.nome}`;
+      if (p.etiqueta) txt += ` | Etiqueta: R$ ${p.etiqueta.toFixed(2)}`;
+      if (p.vendido) txt += ` | Vendido: R$ ${p.vendido.toFixed(2)}`;
+      txt += '\n';
+    });
+    if (v.nomeCliente) txt += `   Cliente: ${v.nomeCliente}${v.telefone ? ' · ' + v.telefone : ''}\n`;
+    txt += `   Data: ${fData(v.data)}\n`;
+    if (v.valorEtiqueta) txt += `   Etiqueta: R$ ${v.valorEtiqueta.toFixed(2)}\n`;
+    txt += `   Negociado: R$ ${v.valorVendido.toFixed(2)}\n`;
+    txt += `   Recebido: R$ ${(v.valorRecebido||v.valorVendido).toFixed(2)}\n`;
+    if (v.saldoReceber && v.saldoReceber > 0) txt += `   Saldo: R$ ${v.saldoReceber.toFixed(2)}\n`;
+    txt += `   Pagamento: ${v.pagamento}${v.parcelas>1?' ('+v.parcelas+'x)':''} · ${v.status||'Pago'}\n`;
+    if (v.encomenda) txt += `   ⚠️ ENCOMENDA\n`;
+    if (v.obs) txt += `   Obs: ${v.obs}\n`;
+    txt += '\n';
+  });
+  txt += `${'='.repeat(44)}\nTOTAL: R$ ${total.toFixed(2)} (${vendas.length} vendas)`;
+  if (pend > 0) txt += `\nA RECEBER: R$ ${pend.toFixed(2)}`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], {type:'text/plain'}));
+  a.download = 'relatorio_racko_fenacce.txt';
+  a.click();
+}
+</script>
+</body>
+</html>
