@@ -373,6 +373,7 @@ const SB_API=p=>`${SB_URL}/rest/v1/${p}`;
 const SB_H={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=representation'};
 const sbGet=async(t,q='')=>{const r=await fetch(SB_API(t)+(q?'?'+q:''),{headers:{...SB_H,'Prefer':''}});if(!r.ok)throw new Error(await r.text());return r.json()};
 const sbInsert=async(t,d)=>{const r=await fetch(SB_API(t),{method:'POST',headers:SB_H,body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json()};
+const sbDeleteRow=async(t,id)=>{const r=await fetch(SB_API(t)+'?id=eq.'+id,{method:'DELETE',headers:{...SB_H,'Prefer':''}});if(!r.ok)throw new Error(await r.text())};
 
 // ══════════════════════════════
 // TAXAS POR CONTA — agora vêm do Supabase (tabela taxas_cartao), não fixas no código.
@@ -529,12 +530,41 @@ async function carregarContas() {
   if (sel) sel.innerHTML = contasConfig.map(c => `<option value="${c.chave}">${c.nome}</option>`).join('');
 }
 
-let vendas = JSON.parse(localStorage.getItem('racko_v3') || '[]');
+let vendas = JSON.parse(localStorage.getItem('racko_v3') || '[]'); // cache local (offline); a fonte principal é o Supabase
+let vendasPendentesRegistro = JSON.parse(localStorage.getItem('racko_vendas_pendentes') || '[]'); // ids ainda não gravados na tabela vendas
 let pendentesSync = JSON.parse(localStorage.getItem('racko_pendentes_sync') || '[]');
 let pag = '', status = 'Pago', enc = false, filtro = 'todos', modoPag = 'maquininha';
 
 function salvarLS() { localStorage.setItem('racko_v3', JSON.stringify(vendas)); }
 function salvarPendentesLS() { localStorage.setItem('racko_pendentes_sync', JSON.stringify(pendentesSync)); }
+function salvarVendasPendentesLS() { localStorage.setItem('racko_vendas_pendentes', JSON.stringify(vendasPendentesRegistro)); }
+
+// ══════════════════════════════
+// VENDAS — agora gravadas na tabela `vendas` do Supabase (visível em qualquer
+// dispositivo), com o cache local (racko_v3) como reforço só pra funcionar offline.
+// ══════════════════════════════
+async function carregarVendas() {
+  try {
+    const rows = await sbGet('vendas', 'order=created_at.desc');
+    const remotas = rows.map(r => ({ ...r.dados, id: r.id }));
+    // Mantém, no topo, qualquer venda feita offline neste aparelho que ainda não subiu
+    const locaisPendentes = vendas.filter(v => vendasPendentesRegistro.includes(v.id));
+    vendas = [...locaisPendentes, ...remotas];
+    salvarLS();
+    renderVendas(); renderResumo();
+  } catch (e) {
+    console.warn('Sem conexão com o Supabase — mostrando só o que está salvo neste aparelho.', e.message);
+  }
+}
+
+async function gravarVendaNoSupabase(v) {
+  const [row] = await sbInsert('vendas', { dados: v });
+  const idAntigo = v.id;
+  v.id = row.id; // troca o id temporário (local) pelo id definitivo do Supabase
+  vendasPendentesRegistro = vendasPendentesRegistro.filter(id => id !== idAntigo);
+  salvarVendasPendentesLS();
+  return v.id;
+}
 
 async function enviarParaSheet(venda) {
   try {
@@ -760,8 +790,9 @@ document.getElementById('data').value = new Date().toISOString().split('T')[0];
 addProduto(); // produto inicial
 carregarContas().then(() => calcTaxaEAtualizar());
 carregarTaxasCartao();
+carregarVendas();
 atualizarBadgePendentes();
-if (pendentesSync.length) sincronizarPendentes(); // tenta sincronizar sozinho ao abrir, se tiver internet
+if (pendentesSync.length || vendasPendentesRegistro.length) sincronizarPendentes(); // tenta sincronizar sozinho ao abrir, se tiver internet
 
 async function salvar() {
   const prods = getProdutos();
@@ -811,6 +842,14 @@ async function salvar() {
       : document.getElementById('origem').value,
     sincronizado: false
   };
+
+  try {
+    await gravarVendaNoSupabase(v);
+  } catch (e) {
+    console.warn('Não foi possível gravar a venda no Supabase agora, guardando só neste aparelho:', e.message);
+    vendasPendentesRegistro.push(v.id);
+    salvarVendasPendentesLS();
+  }
 
   vendas.unshift(v);
   salvarLS();
@@ -900,6 +939,7 @@ function cardVenda(v) {
         ${v.parcelas > 1 ? `<div style="font-size:11px;color:#c8b89c;margin-top:2px">${v.parcelas}x R$ ${(v.valorVendido/v.parcelas).toFixed(2)}</div>` : ''}
         <div style="margin-top:3px">${bSt(v.status||'Pago')}${v.encomenda ? '<span class="badge b-enc">🔖 Enc</span>' : ''}</div>
         <div style="font-size:10px;margin-top:3px;color:${v.sincronizado?'#66bb6a':'#ffb74d'}">${v.sincronizado ? '✓ no financeiro' : '⏳ pendente'}</div>
+        ${vendasPendentesRegistro.includes(v.id) ? '<div style="font-size:10px;margin-top:2px;color:#ffb74d">📵 só neste aparelho</div>' : ''}
       </div>
     </div>
     ${v.obs ? `<div style="font-size:12px;color:#c8b89c;margin-top:6px">📝 ${v.obs}</div>` : ''}
@@ -918,7 +958,10 @@ function marcarPago(id) {
 
 function deletar(id) {
   if (!confirm('Remover esta venda?')) return;
+  sbDeleteRow('vendas', id).catch(e => console.warn('Não foi possível remover da nuvem (pode já não existir lá):', e.message));
   vendas = vendas.filter(v => v.id !== id);
+  vendasPendentesRegistro = vendasPendentesRegistro.filter(pid => pid !== id);
+  salvarVendasPendentesLS();
   salvarLS(); renderVendas();
 }
 
@@ -1033,7 +1076,23 @@ async function tentarSincronizar(v) {
 }
 
 async function sincronizarPendentes() {
-  if (!pendentesSync.length) { showToastVendas('Nada pendente para sincronizar.'); return; }
+  // 1) Vendas que ainda não foram gravadas na tabela `vendas` (só existiam neste aparelho)
+  if (vendasPendentesRegistro.length) {
+    const idsReg = [...vendasPendentesRegistro];
+    for (const id of idsReg) {
+      const v = vendas.find(x => x.id === id);
+      if (!v) { vendasPendentesRegistro = vendasPendentesRegistro.filter(p => p !== id); continue; }
+      try { await gravarVendaNoSupabase(v); salvarLS(); } catch (e) { /* continua pendente, tenta de novo depois */ }
+    }
+    salvarVendasPendentesLS();
+  }
+
+  // 2) Lançamentos no financeiro que falharam antes
+  if (!pendentesSync.length) {
+    if (!vendasPendentesRegistro.length) showToastVendas('Nada pendente para sincronizar.');
+    atualizarBadgePendentes();
+    return;
+  }
   const ids = [...pendentesSync];
   let ok = 0;
   for (const id of ids) {
@@ -1050,8 +1109,9 @@ async function sincronizarPendentes() {
 function atualizarBadgePendentes() {
   const el = document.getElementById('badge-pendentes');
   if (!el) return;
-  el.style.display = pendentesSync.length ? 'inline-block' : 'none';
-  el.textContent = pendentesSync.length;
+  const total = pendentesSync.length + vendasPendentesRegistro.length;
+  el.style.display = total ? 'inline-block' : 'none';
+  el.textContent = total;
 }
 
 function showToastVendas(msg) {
