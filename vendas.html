@@ -201,6 +201,7 @@ body { font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
     <div class="pag-grid" id="modo-pag-grid">
       <div class="pag-btn sel" onclick="selModo(this,'maquininha')">🖲️ Maquininha</div>
       <div class="pag-btn" onclick="selModo(this,'tapon')">📱 Tap On</div>
+      <div class="pag-btn" onclick="selModo(this,'online')">🔗 Link</div>
     </div>
   </div>
   <div class="field">
@@ -336,7 +337,7 @@ body { font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
     <h2>+ Adicionar taxa</h2>
     <div class="row2">
       <div class="field"><label>Modo</label>
-        <select id="nt-modo"><option value="maquininha">Maquininha</option><option value="tapon">Tap On</option><option value="online">Online (link/boleto)</option></select>
+        <select id="nt-modo"><option value="maquininha">Maquininha</option><option value="tapon">Tap On</option><option value="online">Link de pagamento</option></select>
       </div>
       <div class="field"><label>Forma</label>
         <select id="nt-tipo" onchange="atualizarBandeiraNovaTaxa()"><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select>
@@ -388,6 +389,10 @@ async function carregarTaxasCartao() {
 function buscarTaxa(conta, modo, tipo, bandeira, parcelas) {
   let rows = taxasCartao.filter(r => r.conta === conta && r.tipo === tipo && (tipo === 'pix' || r.modo === modo) && (tipo === 'pix' || r.bandeira === bandeira || r.bandeira === 'todas'));
   if (!rows.length) return null;
+  // Pix: prefere a taxa do mesmo modo (maquininha / Tap On / link); se não houver, usa qualquer Pix da conta
+  if (tipo === 'pix') { const doModo = rows.filter(r => r.modo === modo); if (doModo.length) rows = doModo; }
+  // Bandeira específica tem prioridade sobre "todas"
+  rows = rows.slice().sort((a,b) => (b.bandeira === bandeira) - (a.bandeira === bandeira));
   const exata = rows.find(r => Number(r.parcela) === parcelas);
   if (exata) return exata;
   const menores = rows.filter(r => Number(r.parcela) < parcelas).sort((a,b) => b.parcela - a.parcela);
@@ -411,30 +416,45 @@ function calcularTaxaDB(valor, conta, modo, tipoPag, bandeira, parcelas) {
 // Dados de exemplo do PagBank (Plano Essencial), validados por simulação real — usados só para
 // popular rapidamente a aba ⚙️ Taxas na conta que você escolher; não afetam o cálculo diretamente.
 const EXEMPLO_PAGBANK = [
-  {modo:'maquininha',tipo:'pix',bandeira:'todas',parcela:1,taxa_pct:0.10,dias_recebimento:0},
-  {modo:'maquininha',tipo:'debito',bandeira:'visa_master',parcela:1,taxa_pct:0.75,dias_recebimento:0},
-  {modo:'maquininha',tipo:'debito',bandeira:'outras',parcela:1,taxa_pct:2.98,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:1,taxa_pct:2.75,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:2,taxa_pct:5.18,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:3,taxa_pct:5.99,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:4,taxa_pct:6.79,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:5,taxa_pct:7.58,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:6,taxa_pct:8.36,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:7,taxa_pct:11.42,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:8,taxa_pct:12.18,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:9,taxa_pct:12.94,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:10,taxa_pct:13.69,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:11,taxa_pct:14.43,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:12,taxa_pct:15.16,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'elo_hiper',parcela:1,taxa_pct:4.99,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'elo_hiper',parcela:2,taxa_pct:5.99,dias_recebimento:0},
-  {modo:'maquininha',tipo:'credito',bandeira:'diners',parcela:1,taxa_pct:3.19,dias_recebimento:30},
-  {modo:'maquininha',tipo:'credito',bandeira:'diners',parcela:2,taxa_pct:3.79,dias_recebimento:30},
+  {modo:'maquininha',tipo:'pix',bandeira:'todas',parcela:1,taxa_pct:0,dias_recebimento:0},
+  {modo:'maquininha',tipo:'debito',bandeira:'visa_master',parcela:1,taxa_pct:0.79,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:1,taxa_pct:2.79,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:2,taxa_pct:3.67,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:3,taxa_pct:4.38,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:4,taxa_pct:5.08,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:5,taxa_pct:5.78,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:6,taxa_pct:6.47,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:7,taxa_pct:7.16,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:8,taxa_pct:7.83,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:9,taxa_pct:8.51,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:10,taxa_pct:9.17,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:11,taxa_pct:9.83,dias_recebimento:0},
+  {modo:'maquininha',tipo:'credito',bandeira:'visa_master',parcela:12,taxa_pct:10.48,dias_recebimento:0},
   {modo:'tapon',tipo:'debito',bandeira:'todas',parcela:1,taxa_pct:0.88,dias_recebimento:0},
   {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:1,taxa_pct:3.14,dias_recebimento:0},
-  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:2,taxa_pct:2.47,dias_recebimento:0},
-  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:7,taxa_pct:2.78,dias_recebimento:0},
-  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:13,taxa_pct:5.59,dias_recebimento:0}
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:2,taxa_pct:4.65,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:3,taxa_pct:5.36,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:4,taxa_pct:6.06,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:5,taxa_pct:6.76,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:6,taxa_pct:7.45,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:7,taxa_pct:8.45,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:8,taxa_pct:9.12,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:9,taxa_pct:9.8,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:10,taxa_pct:10.46,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:11,taxa_pct:11.12,dias_recebimento:0},
+  {modo:'tapon',tipo:'credito',bandeira:'todas',parcela:12,taxa_pct:11.77,dias_recebimento:0},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:1,taxa_pct:3.79,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:2,taxa_pct:5.3,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:3,taxa_pct:6.18,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:4,taxa_pct:7.05,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:5,taxa_pct:7.91,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:6,taxa_pct:8.76,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:7,taxa_pct:9.7,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:8,taxa_pct:10.53,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:9,taxa_pct:11.35,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:10,taxa_pct:12.16,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:11,taxa_pct:12.95,dias_recebimento:5},
+  {modo:'online',tipo:'credito',bandeira:'todas',parcela:12,taxa_pct:13.74,dias_recebimento:5}
 ];
 
 async function carregarExemploPagBank() {
@@ -459,7 +479,7 @@ function renderTaxasSelectConta() {
 
 const LABELS_BANDEIRA = { visa_master:'Visa/Master', elo_hiper:'Elo/Hipercard', diners:'Diners', outras:'Outras', todas:'Todas' };
 const LABELS_TIPO = { pix:'Pix', debito:'Débito', credito:'Crédito' };
-const LABELS_MODO = { maquininha:'Maquininha', tapon:'Tap On', online:'Online' };
+const LABELS_MODO = { maquininha:'Maquininha', tapon:'Tap On', online:'Link' };
 
 function renderTaxasConta() {
   const conta = document.getElementById('taxas-conta')?.value;
@@ -673,7 +693,7 @@ function selPag(el, tipo) {
   document.getElementById('parc-row').className = 'parc-row' + (tipo === 'Crédito' ? ' show' : '');
 
   const precisaModo = (tipo === 'Débito' || tipo === 'Crédito');
-  document.getElementById('modo-field').style.display = precisaModo ? 'block' : 'none';
+  document.getElementById('modo-field').style.display = (precisaModo || tipo === 'Pix') ? 'block' : 'none';
   document.getElementById('bandeira-field').style.display = precisaModo ? 'block' : 'none';
   if (precisaModo) atualizarOpcoesBandeira();
   calcTaxaEAtualizar();
@@ -681,13 +701,13 @@ function selPag(el, tipo) {
 
 function atualizarOpcoesBandeira() {
   const sel = document.getElementById('bandeira');
-  if (modoPag === 'tapon') {
-    // Tap On: sem distinção de bandeira nas taxas coletadas
+  if (modoPag === 'tapon' || modoPag === 'online') {
+    // Tap On e Link: sem distinção de bandeira nas taxas
     sel.innerHTML = `<option value="todas">Todas as bandeiras</option>`;
     return;
   }
   if (pag === 'Débito') {
-    sel.innerHTML = `<option value="visa_master">Visa / Mastercard (0,75%)</option><option value="outras">Elo / outras (2,98%)</option>`;
+    sel.innerHTML = `<option value="visa_master">Visa / Mastercard</option><option value="outras">Elo / outras</option>`;
   } else if (pag === 'Crédito') {
     sel.innerHTML = `<option value="visa_master">Visa / Mastercard</option><option value="elo_hiper">Elo / Hipercard</option><option value="diners">Diners (recebe em 30 dias)</option>`;
   }
@@ -870,7 +890,7 @@ async function salvar() {
     valorRecebido: valorRecebidoAgora,
     saldoReceber: +(vv - valorRecebidoAgora).toFixed(2),
     pagamento: pag,
-    modo: (pag === 'Débito' || pag === 'Crédito') ? modoPag : null,
+    modo: (pag === 'Pix' || pag === 'Débito' || pag === 'Crédito') ? modoPag : null,
     bandeira: (pag === 'Débito' || pag === 'Crédito') ? bandeira : null,
     parcelas,
     pct, valorTaxa, valorLiquido, diasRecebimento,
