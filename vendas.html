@@ -933,7 +933,7 @@ async function salvar() {
 
   const ok = await tentarSincronizar(v);
   showToastVendas(ok
-    ? '✓ Venda lançada no financeiro (venda' + (v.valorTaxa > 0 ? ' + taxa' : '') + ').'
+    ? '✓ Venda lançada no financeiro (venda' + (v.valorTaxa > 0 ? ' + taxa' : '') + (v.cofrinhoLancado ? ' + cofrinho' : '') + ').'
     : '⚠ Venda salva, mas sem internet/erro ao sincronizar. Ficou pendente — tentaremos de novo depois.');
 }
 
@@ -1024,6 +1024,60 @@ function deletar(id) {
   vendasPendentesRegistro = vendasPendentesRegistro.filter(pid => pid !== id);
   salvarVendasPendentesLS();
   salvarLS(); renderVendas();
+}
+
+// ══════════════════════════════
+// COFRINHO PAGBANK — o app do PagBank separa 10% do valor BRUTO de cada recebimento
+// (maquininha, Tap On, link e Pix) e guarda no cofrinho. Aqui isso aparece como uma
+// transferência: saída da conta PagBank + entrada na conta "Cofrinho".
+// Vale só para vendas recebidas na conta PagBank (dinheiro e outras contas ficam de fora).
+// ══════════════════════════════
+const COFRINHO_PCT = 10;
+function ehContaPagBank(chave) {
+  const c = contasConfig.find(x => x.chave === chave);
+  return !!c && /pagbank/i.test(c.nome || '') && !/cofrinho/i.test(c.nome || '');
+}
+function contaCofrinho() { return contasConfig.find(x => /cofrinho/i.test(x.nome || '')); }
+
+async function lancarCofrinho(v, conta, recebidoAgora, dataRecebimento, recebidoNaHora) {
+  if (v.cofrinhoLancado) return;                                   // nunca lança duas vezes
+  if (!ehContaPagBank(conta)) return;
+  if (!['Pix', 'Débito', 'Crédito'].includes(v.pagamento)) return;  // dinheiro fica de fora
+  if (!(recebidoAgora > 0)) return;                                // venda pendente: nada recebido ainda
+  const cof = contaCofrinho();
+  const valor = +(recebidoAgora * COFRINHO_PCT / 100).toFixed(2);
+  if (!cof) {
+    showToastVendas('⚠ Conta "Cofrinho" não existe no financeiro. Lance a transferência de R$ ' + valor.toFixed(2) + ' manualmente.');
+    return;
+  }
+  let etapa = 0; // quantos passos do lançamento já foram gravados
+  try {
+    const nomePag = getNomeContaVendas(conta);
+    const desc = `Cofrinho ${COFRINHO_PCT}% — ${v.nomeCliente || 'venda'}`;
+    const mes = v.data.substring(0, 7);
+    const base = { descricao: desc, valor, data: v.data, is_pessoal: false, mes,
+                   confirmado: recebidoNaHora, tem_baixa: recebidoNaHora,
+                   cliente: null, pedido_id: null, recorrente: false };
+    const [lSaida] = await sbInsert('lancamentos', { ...base, tipo: 'saida', cat: 'outros_saida', conta,
+      obs: `Transferência automática para ${cof.nome} (${COFRINHO_PCT}% do valor bruto recebido: R$ ${recebidoAgora.toFixed(2)})` });
+    etapa = 1;
+    await sbInsert('parcelas', [{ lancamento_id: lSaida.id, label: `saída → ${cof.nome}`, valor,
+      data_vencimento: dataRecebimento, conta, pago: recebidoNaHora, tipo: 'saida',
+      conta_baixa: recebidoNaHora ? conta : null, data_baixa: recebidoNaHora ? v.data : null }]);
+    etapa = 2;
+    const [lEntrada] = await sbInsert('lancamentos', { ...base, tipo: 'entrada', cat: 'outros_entrada', conta: cof.chave,
+      obs: `Transferência automática de ${nomePag} (${COFRINHO_PCT}% do valor bruto recebido: R$ ${recebidoAgora.toFixed(2)})` });
+    await sbInsert('parcelas', [{ lancamento_id: lEntrada.id, label: `entrada ← ${nomePag}`, valor,
+      data_vencimento: dataRecebimento, conta: cof.chave, pago: recebidoNaHora, tipo: 'entrada',
+      conta_baixa: recebidoNaHora ? cof.chave : null, data_baixa: recebidoNaHora ? v.data : null }]);
+    v.cofrinhoLancado = true;
+  } catch (e) {
+    // Não derruba a sincronização da venda (evitaria duplicar a venda no retry)
+    console.warn('Cofrinho não lançado:', e.message);
+    showToastVendas(etapa === 0
+      ? '⚠ Venda lançada, mas o cofrinho (R$ ' + valor.toFixed(2) + ') falhou. Lance a transferência manualmente.'
+      : '⚠ Cofrinho (R$ ' + valor.toFixed(2) + ') ficou lançado pela metade. Confira "Cofrinho ' + COFRINHO_PCT + '%" no financeiro e complete à mão.');
+  }
 }
 
 // ══════════════════════════════
@@ -1119,6 +1173,9 @@ async function sincronizarComFinanceiro(v) {
       data_baixa: recebidoNaHora ? v.data : null
     }]);
   }
+
+  // 3) Cofrinho PagBank (10% do valor bruto recebido)
+  await lancarCofrinho(v, conta, recebidoAgora, dataRecebimento, recebidoNaHora);
 }
 
 async function tentarSincronizar(v) {
