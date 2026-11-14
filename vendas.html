@@ -744,6 +744,28 @@ function selSt(s) {
   ['pago','pendente','parcial'].forEach(x => {
     document.getElementById('s-' + x).className = 'st-btn' + (x === s.toLowerCase() ? ' ' + x : '');
   });
+  // Mantém o campo "Valor pago pelo cliente agora" sempre coerente com o status
+  // escolhido — é esse valor (e só ele) que decide se o financeiro baixa a conta.
+  // Atualiza o campo diretamente (sem passar por calcSaldo, pra não entrar num
+  // loop com o selSt que o próprio calcSaldo chama de volta).
+  const campoRecebido = document.getElementById('valorRecebido');
+  const vv = parseFloat(document.getElementById('valorVendido').value) || 0;
+  if (!campoRecebido) return;
+  const saldoEl = document.getElementById('saldo-display');
+  if (s === 'Pendente') {
+    campoRecebido.value = '0';
+    campoRecebido.disabled = true;
+    if (saldoEl) saldoEl.style.display = 'none';
+  } else if (s === 'Pago') {
+    campoRecebido.disabled = false;
+    campoRecebido.value = vv > 0 ? vv.toFixed(2) : '';
+    if (saldoEl) saldoEl.style.display = 'none';
+  } else { // Parcial
+    campoRecebido.disabled = false;
+    const atual = parseFloat(campoRecebido.value) || 0;
+    if (atual <= 0 || atual >= vv) campoRecebido.value = '';
+    campoRecebido.focus();
+  }
 }
 
 function togEnc() {
@@ -806,7 +828,26 @@ async function salvar() {
   const parcelas = pag === 'Crédito' ? parseInt(document.getElementById('parcelas').value) : 1;
   const contaSelecionada = document.getElementById('conta')?.value || 'caixa';
   const vrRaw = document.getElementById('valorRecebido').value;
-  const valorRecebidoAgora = vrRaw === '' ? vv : (parseFloat(vrRaw) || 0); // '' = assume pago integral; "0" explícito = nada recebido ainda
+  // Trava de segurança: o status é quem manda. "Pendente" nunca pode virar baixa no
+  // financeiro, mesmo que o campo "valor recebido" esteja (por algum motivo) em branco
+  // ou desatualizado. "Parcial" exige um valor explícito — nunca assume o total.
+  // Só "Pago" admite o atalho de campo em branco = pagou tudo.
+  let valorRecebidoAgora;
+  if (status === 'Pendente') {
+    valorRecebidoAgora = 0;
+  } else if (vrRaw === '') {
+    valorRecebidoAgora = (status === 'Pago') ? vv : 0;
+  } else {
+    valorRecebidoAgora = parseFloat(vrRaw) || 0;
+  }
+  if (status === 'Parcial' && valorRecebidoAgora <= 0) {
+    alert('Status "Parcial" selecionado, mas nenhum valor recebido foi informado.\nInforme quanto o cliente já pagou, ou mude o status para "Pendente".');
+    return;
+  }
+  if (status === 'Parcial' && valorRecebidoAgora >= vv) {
+    alert('O valor recebido é igual ou maior que o total da venda — isso é uma venda "Paga", não "Parcial".\nAjuste o status para "Pago" antes de salvar.');
+    return;
+  }
   const precisaTaxa = (pag === 'Pix' || pag === 'Débito' || pag === 'Crédito') && valorRecebidoAgora > 0;
   if (precisaTaxa && !window._ultimaTaxa) {
     if (document.getElementById('taxa-manual-view').style.display === 'block') atualizarPreviaManual();
