@@ -1336,6 +1336,104 @@ function cancelarEdicao(){
 }
 
 
+// ══════════════════════════════════════════════
+// CRM — ENVIO CONFIÁVEL AO SUPABASE + FILA DE PENDENTES + DIAGNÓSTICO
+// ══════════════════════════════════════════════
+function getOrcPendentes(){try{return JSON.parse(localStorage.getItem('racko_crm_pendentes')||'{}')}catch(e){return {}}}
+function setOrcPendentes(o){try{localStorage.setItem('racko_crm_pendentes',JSON.stringify(o))}catch(e){}}
+function _isoData(s,fallback){
+  if(!s)return (fallback||new Date().toISOString()).substring(0,10);
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.substring(0,10);
+  const m=String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(m)return `${m[3]}-${m[2]}-${m[1]}`;
+  return (fallback||new Date().toISOString()).substring(0,10);
+}
+function recordParaSb(r){
+  const opts=r.opts||[];
+  return {
+    orc_id:r.id,nome:r.nome,tel:r.tel,email:r.email,data:_isoData(r.data,r.createdAt),
+    tipo:r.tipo,metal:r.metal,tam:r.tam,acab:r.acab,pedras:r.pedras,dim:r.dim,pers:r.pers,descricao:r.desc,
+    prazo:r.prazo,validade:r.valid,opts:opts,
+    total_val:r.totalVal!==undefined?r.totalVal:opts.reduce((a,b)=>a+(b.value||0),0),pgto:r.pgto||'',
+    status:r.status||'enviado',contatos:r.contatos||[],pedido_financeiro:r.pedidoFinanceiro||null
+  };
+}
+function mostrarAlertaCRM(html){
+  let el=document.getElementById('crm-alerta');
+  if(!el){
+    el=document.createElement('div');el.id='crm-alerta';
+    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#7a1d16;color:#fff;font-family:Rajdhani,sans-serif;font-size:13px;padding:10px 14px;box-shadow:0 2px 12px rgba(0,0,0,.5)';
+    document.body.appendChild(el);
+  }
+  el.innerHTML=html;el.style.display='block';
+}
+function esconderAlertaCRM(){const el=document.getElementById('crm-alerta');if(el)el.style.display='none';}
+function explicarErroSb(e){
+  const m=String((e&&e.message)||e||'');
+  if(/row-level security|42501|permission denied|401|403/i.test(m))return 'O banco recusou a gravação por regra de segurança (RLS). A tabela precisa de uma política de acesso.';
+  if(/Failed to fetch|NetworkError|Load failed|timeout/i.test(m))return 'Sem conexão com o banco (internet ou projeto Supabase pausado).';
+  if(/PGRST204|column|42703/i.test(m))return 'Uma coluna da tabela crm_orcamentos não existe ou mudou de nome.';
+  if(/42P01|relation|PGRST205|404/i.test(m))return 'A tabela crm_orcamentos não foi encontrada.';
+  if(/0 linhas|não foi confirmad/i.test(m))return m;
+  return 'Erro do banco: '+m.substring(0,160);
+}
+function atualizarAvisoPendentes(){
+  const n=Object.keys(getOrcPendentes()).length;
+  if(!n){esconderAlertaCRM();return;}
+  mostrarAlertaCRM(`<b>⚠ ${n} orçamento(s) NÃO estão salvos na nuvem.</b> Ficaram guardados só neste aparelho — não limpe os dados do navegador. `
+    +`<button onclick="reenviarOrcPendentes()" style="margin:0 4px;padding:3px 10px">Tentar reenviar</button>`
+    +`<button onclick="diagnosticoCRM()" style="margin:0 4px;padding:3px 10px">Diagnóstico</button>`
+    +`<button onclick="baixarBackupPendentes()" style="margin:0 4px;padding:3px 10px">Baixar backup</button>`
+    +`<span id="crm-alerta-detalhe" style="display:block;margin-top:4px;opacity:.9">${window._ultimoErroCRM?explicarErroSb(window._ultimoErroCRM):''}</span>`);
+}
+async function enviarOrcParaSupabase(orcId,sbData,silencioso){
+  try{
+    const rows=await sbGet('crm_orcamentos',`orc_id=eq.${encodeURIComponent(orcId)}`);
+    if(rows&&rows.length>0){
+      const up=await sbUpdate('crm_orcamentos',rows[0].id,{...sbData,updated_at:new Date().toISOString()});
+      if(!up||!up.length)throw new Error('0 linhas atualizadas — o banco não aceitou a alteração (regra de segurança RLS).');
+    }else{
+      const ins=await sbInsert('crm_orcamentos',sbData);
+      if(!ins||!ins.length)throw new Error('A gravação não foi confirmada pelo banco.');
+    }
+    const p=getOrcPendentes();delete p[orcId];setOrcPendentes(p);
+    window._ultimoErroCRM=null;atualizarAvisoPendentes();
+    if(!silencioso)showToast('✓ Orçamento salvo no CRM (nuvem)');
+    return true;
+  }catch(e){
+    console.error('CRM — falha ao salvar na nuvem:',e);
+    window._ultimoErroCRM=e;
+    const p=getOrcPendentes();p[orcId]=sbData;setOrcPendentes(p);
+    atualizarAvisoPendentes();
+    showToast('✗ NÃO salvou na nuvem — veja o aviso vermelho no topo');
+    return false;
+  }
+}
+async function reenviarOrcPendentes(){
+  const p=getOrcPendentes();const ids=Object.keys(p);
+  if(!ids.length){showToast('Nada pendente');return;}
+  let ok=0;
+  for(const id of ids){if(await enviarOrcParaSupabase(id,p[id],true))ok++;}
+  showToast(ok===ids.length?`✓ ${ok} orçamento(s) enviados`:`${ok}/${ids.length} enviados — ainda há erro`);
+  try{await loadCRMRecords();renderMetrics();renderLista();}catch(e){}
+}
+function baixarBackupPendentes(){
+  const data=JSON.stringify({pendentes:getOrcPendentes(),locais:JSON.parse(localStorage.getItem('racko_crm')||'[]')},null,2);
+  const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download=`racko_crm_backup_${new Date().toISOString().split('T')[0]}.json`;a.click();URL.revokeObjectURL(url);
+}
+async function diagnosticoCRM(){
+  const out=[];
+  const T=async(nome,fn)=>{try{out.push('✅ '+nome+': '+await fn())}catch(e){out.push('❌ '+nome+': '+String(e.message||e).substring(0,300))}};
+  await T('Conexão e leitura da tabela',async()=>{const r=await fetch(SB_API('crm_orcamentos')+'?select=id&limit=1',{headers:{...SB_H,'Prefer':'count=exact'}});const t=await r.text();if(!r.ok)throw new Error('HTTP '+r.status+' '+t);return 'HTTP '+r.status+', linhas visíveis: '+(r.headers.get('content-range')||'?');});
+  const teste={orc_id:'__teste_diagnostico__',nome:'TESTE DIAGNÓSTICO (pode apagar)',data:new Date().toISOString().split('T')[0],opts:[],contatos:[],status:'enviado'};
+  let idTeste=null;
+  await T('Gravação (insert)',async()=>{const r=await sbInsert('crm_orcamentos',teste);if(!r||!r.length)throw new Error('o banco respondeu sem confirmar a linha');idTeste=r[0].id;return 'ok';});
+  if(idTeste!==null)await T('Exclusão do teste',async()=>{await sbDelete('crm_orcamentos',idTeste);return 'ok';});
+  const msg=out.join('\n')+'\n\nPendentes neste aparelho: '+Object.keys(getOrcPendentes()).length+'\nMande este texto para a Claude.';
+  alert(msg);console.log(msg);
+}
+
 function saveToCRM(d){
   try{
     const records=JSON.parse(localStorage.getItem('racko_crm')||'[]');
@@ -1364,7 +1462,7 @@ function saveToCRM(d){
     if(existingIdx>=0)records[existingIdx]=record;else records.unshift(record);
     localStorage.setItem('racko_crm',JSON.stringify(records));
 
-    // Salvar também no Supabase (nuvem)
+    // Salvar também no Supabase (nuvem) — agora com confirmação real e aviso visível se falhar
     const sbData={
       orc_id:record.id,nome:record.nome,tel:record.tel,email:record.email,
       data:document.getElementById('f-data').value||new Date().toISOString().split('T')[0],
@@ -1374,22 +1472,7 @@ function saveToCRM(d){
       total_val:record.totalVal,pgto:record.pgto,
       status:record.status,contatos:record.contatos,pedido_financeiro:record.pedidoFinanceiro||null
     };
-    // Upsert: atualiza se já existe orc_id, insere se não existe
-    sbGet('crm_orcamentos',`orc_id=eq.${record.id}`).then(rows=>{
-      if(rows.length>0){
-        // Já existe — atualiza o registro existente
-        sbUpdate('crm_orcamentos',rows[0].id,{...sbData,updated_at:new Date().toISOString()})
-          .catch(e=>console.warn('Supabase CRM update:',e));
-      }else{
-        // Não existe — insere novo
-        sbInsert('crm_orcamentos',sbData).catch(e=>console.warn('Supabase CRM insert:',e));
-      }
-    }).catch(e=>{
-      // Se falhar a verificação, tenta inserir mesmo assim
-      sbInsert('crm_orcamentos',sbData).catch(e2=>console.warn('Supabase CRM save:',e2));
-    });
-
-    showToast('✓ Orçamento salvo no CRM');
+    enviarOrcParaSupabase(record.id,sbData);
   }catch(e){console.warn('CRM save error:',e);}
 }
 
@@ -1645,11 +1728,32 @@ async function loadCRMRecords(){
       contatos:r.contatos||[],dataEntrega:r.data_entrega||'',
       pedidoFinanceiro:r.pedido_financeiro||''
     }));
-  }catch(e){console.warn('Erro ao carregar CRM:',e);crmRecords=[];}
+  }catch(e){
+    console.warn('Erro ao carregar CRM:',e);crmRecords=[];window._ultimoErroCRM=e;
+    mostrarAlertaCRM('<b>⚠ Não consegui ler o CRM na nuvem.</b> '+explicarErroSb(e)+' <button onclick="diagnosticoCRM()" style="margin-left:6px;padding:3px 10px">Diagnóstico</button>');
+  }
+  try{
+    // orçamentos feitos neste aparelho que nunca chegaram ao Supabase entram na fila de pendentes
+    const locais=JSON.parse(localStorage.getItem('racko_crm')||'[]');
+    const pend=getOrcPendentes();let mudou=false;
+    if(!window._ultimoErroCRM||crmRecords.length){
+      locais.forEach(l=>{if(l&&l.id&&!crmRecords.find(x=>x.id===l.id)&&!pend[l.id]){pend[l.id]=recordParaSb(l);mudou=true;}});
+    }
+    if(mudou)setOrcPendentes(pend);
+    // pendentes aparecem na lista (marcados) para não "sumirem"
+    Object.keys(pend).forEach(k=>{
+      if(crmRecords.find(x=>x.id===k))return;
+      const r=pend[k];
+      crmRecords.unshift({...r,id:k,_sbid:null,_pendente:true,desc:r.descricao,valid:r.validade,totalVal:Number(r.total_val)||0,
+        opts:r.opts||[],pgto:r.pgto||'',status:r.status||'enviado',followUp:'',notas:'',contatos:r.contatos||[],dataEntrega:'',pedidoFinanceiro:r.pedido_financeiro||''});
+    });
+    if(Object.keys(pend).length)atualizarAvisoPendentes();
+  }catch(e2){console.warn('pendentes CRM:',e2);}
   return crmRecords;
 }
 
 function getRecords(){return crmRecords;}
+setTimeout(()=>{try{if(Object.keys(getOrcPendentes()).length)reenviarOrcPendentes();else loadCRMRecords();}catch(e){}},2500);
 function getRecord(id){return crmRecords.find(r=>r.id===id||r._sbid===parseInt(id));}
 
 async function saveRecords(records){
